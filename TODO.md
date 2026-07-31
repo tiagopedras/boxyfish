@@ -12,6 +12,9 @@ not mutually exclusive.
   then go back to what they were doing. The most aquarium-like of the four.
 - **Click a fish** — clicking an individual fish makes it respond: dart away,
   turn to face you, or come forward. Aimed at one fish rather than the shoal.
+- **Drag a fish around** — while a fish is being dragged with the mouse it
+  beats its tail rapidly, and its body tilts to point along the direction it
+  is being pulled. Let go and it swims off normally.
 - **Click to add a fish** — each click drops another fish in, so someone can
   build up their own tank.
 
