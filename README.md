@@ -16,7 +16,11 @@ Then open http://localhost:8123
 
 ## The panel
 
-Bottom right, fades out when the mouse stops. Press **H** to hide it entirely.
+The gear button in the bottom right corner opens it, with the camera button
+alongside it; it stays shut otherwise,
+so the tank is clear while you play with the fish. **Close** at the foot of the
+menu shuts it again, as does **Esc**. Press **H** to toggle it from the
+keyboard.
 
 | Control | What it does |
 |---|---|
@@ -28,8 +32,8 @@ Bottom right, fades out when the mouse stops. Press **H** to hide it entirely.
 
 ## Adding your own fish
 
-The camera button at the bottom of the panel opens a modal with the webcam in
-it. Hold a drawing inside the white bracket facing right, take the photo, and
+The camera button, floating next to the gear in the bottom right, opens a modal
+with the webcam in it. Hold a drawing inside the white bracket facing right, take the photo, and
 it gets cut out the same way the scans were: background dropped, body filled,
 paper thrown away. Whatever colour is inside the outline is kept, in both
 themes, so a captured fish stands out from the 52 originals.
@@ -47,7 +51,7 @@ and it stays until you capture another or reload the page — nothing is saved.
 On a phone the modal skips the camera entirely and goes straight to uploading
 a photo — the file picker there offers the camera anyway, and a live feed in a
 modal is awkward one-handed. The panel's keyboard hint is hidden too, and
-tapping the tank away from the panel hides it; tapping again brings it back.
+tapping the tank while the menu is open closes it.
 
 With no webcam, or if camera access is refused, the modal offers to upload a
 photo instead. Note that browsers only allow camera access on `localhost` or

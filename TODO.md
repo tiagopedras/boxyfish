@@ -43,6 +43,7 @@ a fish around by hand.
 
 ## Options menu
 
-- **Move it behind a floating button.** A gear FAB in the bottom right opens the
-  options menu, so the menu isn't in the way while playing with the fish. Add a
-  close option inside the menu.
+- ~~**Move it behind a floating button.** A gear FAB in the bottom right opens
+  the options menu, so the menu isn't in the way while playing with the fish.
+  Add a close option inside the menu.~~ Done. The camera button moved out of
+  the menu into its own FAB beside the gear.

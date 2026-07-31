@@ -8,15 +8,35 @@
   html,body{margin:0;height:100%;background:#fff;overflow:hidden}
   /* the tank only -- this must not reach the preview canvas in the modal */
   #c{display:block;width:100%;height:100%;touch-action:none}
+  /* the pair of floating buttons, and the panel the gear opens above them */
+  #fabs{
+    position:fixed;right:18px;z-index:3;
+    bottom:calc(18px + env(safe-area-inset-bottom));
+    display:flex;gap:10px;align-items:center
+  }
+  .fab{
+    width:46px;height:46px;padding:0;
+    background:rgba(255,255,255,.9);backdrop-filter:blur(6px);
+    border:1px solid #e2e2e2;border-radius:50%;
+    box-shadow:0 4px 14px rgba(0,0,0,.12);
+    display:grid;place-items:center;cursor:pointer;
+    transition:transform .25s ease,background .2s ease
+  }
+  .fab:hover{background:#fff}
+  .fab svg{display:block}
+  #fab.open{transform:rotate(45deg)}
+
   #panel{
-    position:fixed;right:18px;bottom:18px;z-index:2;
+    position:fixed;right:18px;z-index:2;
+    bottom:calc(76px + env(safe-area-inset-bottom));
     font:12px/1.5 ui-sans-serif,-apple-system,"Helvetica Neue",sans-serif;
     color:#8b8f94;background:rgba(255,255,255,.86);backdrop-filter:blur(6px);
     border:1px solid #ececec;border-radius:10px;padding:12px 14px;
     display:grid;grid-template-columns:auto 108px 34px;gap:7px 10px;align-items:center;
-    transition:opacity .5s ease;user-select:none
+    transition:opacity .22s ease,transform .22s ease;user-select:none;
+    opacity:0;transform:translateY(8px) scale(.98);pointer-events:none
   }
-  #panel.idle{opacity:0}
+  #panel.open{opacity:1;transform:none;pointer-events:auto}
   #panel label{white-space:nowrap}
   #panel input{width:108px;accent-color:#111}
   #panel b{font-weight:500;color:#111;text-align:right;font-variant-numeric:tabular-nums}
@@ -24,20 +44,17 @@
     grid-column:2/-1;width:100%;font:inherit;color:#111;background:#fff;
     border:1px solid #ddd;border-radius:6px;padding:3px 5px
   }
-  #hint{grid-column:1/-1;color:#b7bbc0;font-size:11px;padding-top:2px}
-  /* no keyboard on a phone, and the panel is dismissed by tapping instead */
-  @media (max-width:760px){ #hint{display:none} }
-  #panel.idle{pointer-events:none}
-
-  /* camera button: no label, black outline icon on a white button */
-  #shoot{
-    grid-column:1/-1;justify-self:start;
-    width:38px;height:38px;padding:0;margin-top:2px;
-    background:#fff;border:1px solid #000;border-radius:8px;
-    display:grid;place-items:center;cursor:pointer
+  /* close row at the foot of the menu */
+  #closePanel{
+    grid-column:1/-1;width:100%;margin-top:4px;
+    font:inherit;color:#6b7075;background:#fff;
+    border:1px solid #e4e4e4;border-radius:7px;padding:5px 0;cursor:pointer
   }
-  #shoot:hover{background:#f4f4f4}
-  #shoot svg{display:block}
+  #closePanel:hover{background:#f4f4f4;color:#111}
+  #hint{grid-column:1/-1;color:#b7bbc0;font-size:11px;padding-top:2px}
+  /* no keyboard on a phone, so the shortcut hint is desktop only */
+  @media (max-width:760px){ #hint{display:none} }
+
 
   /* modal */
   #veil{
@@ -156,14 +173,27 @@
   <label>Speed</label>    <input id="speed" type="range" min="0.2" max="2.5" step="0.05" value="1">   <b id="speedV">1.0</b>
   <label>Wave</label>     <input id="wave"  type="range" min="0"   max="2"   step="0.05" value="1">   <b id="waveV">1.0</b>
   <label>Turning</label>  <input id="turn"  type="range" min="0"   max="1.4" step="0.05" value="0.5"> <b id="turnV">0.5</b>
-  <button id="shoot" type="button" title="Add your own fish" aria-label="Add your own fish">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000"
-         stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M3 8.5h3.2l1.5-2.2h8.6l1.5 2.2H21v10H3z"/>
-      <circle cx="12" cy="13" r="3.6"/>
-    </svg>
-  </button>
-  <div id="hint">press H to hide</div>
+  <button id="closePanel" type="button">Close</button>
+  <div id="hint">press H to show or hide</div>
+</div>
+
+<div id="fabs">
+<button id="shoot" class="fab" type="button"
+        title="Add your own fish" aria-label="Add your own fish">
+  <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#111"
+       stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 8.5h3.2l1.5-2.2h8.6l1.5 2.2H21v10H3z"/>
+    <circle cx="12" cy="13" r="3.6"/>
+  </svg>
+</button>
+<button id="fab" class="fab" type="button" title="Options" aria-label="Options"
+        aria-expanded="false" aria-controls="panel">
+  <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#111"
+       stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="3.1"/>
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+  </svg>
+</button>
 </div>
 
 <div id="veil" role="dialog" aria-modal="true" aria-label="Add your own fish">
@@ -760,27 +790,32 @@ function resize(){
 }
 addEventListener('resize', resize);
 
+// the options live behind the gear button, so they stay out of the way of the fish
 const panel = document.getElementById('panel');
-let idleTimer;
-function wake(){
-  panel.classList.remove('idle');
-  clearTimeout(idleTimer);
-  idleTimer = setTimeout(() => panel.classList.add('idle'), 2600);
+const fab = document.getElementById('fab');
+const fabs = document.getElementById('fabs');
+function setPanel(open){
+  panel.classList.toggle('open', open);
+  fab.classList.toggle('open', open);
+  fab.setAttribute('aria-expanded', open ? 'true' : 'false');
 }
-addEventListener('mousemove', wake);
-// on a phone there's no hover to wake the panel, so a tap away hides it
-// and another tap brings it back
+const panelOpen = () => panel.classList.contains('open');
+fab.addEventListener('click', () => setPanel(!panelOpen()));
+document.getElementById('closePanel').addEventListener('click', () => setPanel(false));
+// tapping the water dismisses the menu on a phone, where there's no room to spare
 addEventListener('pointerdown', e => {
-  if (!isMobile() || veil.classList.contains('on')) return;
-  if (panel.contains(e.target)) return;
-  clearTimeout(idleTimer);
-  panel.classList.toggle('idle');
+  if (!isMobile() || !panelOpen() || veil.classList.contains('on')) return;
+  if (panel.contains(e.target) || fabs.contains(e.target)) return;
+  setPanel(false);
 }, true);
-addEventListener('keydown', e => { if (e.key === 'h' || e.key === 'H') panel.style.display = panel.style.display === 'none' ? '' : 'none'; });
+addEventListener('keydown', e => {
+  if (e.key === 'h' || e.key === 'H') setPanel(!panelOpen());
+  if (e.key === 'Escape' && panelOpen() && !veil.classList.contains('on')) setPanel(false);
+});
 for (const [id, key, dp] of [['count','count',0],['speed','speed',1],['wave','wave',1],['turn','turn',1]]){
   const el = document.getElementById(id), out = document.getElementById(id+'V');
   const sync = () => { cfg[key] = +el.value; out.textContent = (+el.value).toFixed(dp); };
-  el.addEventListener('input', () => { sync(); wake(); });
+  el.addEventListener('input', sync);
   sync();
 }
 
@@ -792,9 +827,8 @@ function applyTheme(){
   document.body.style.background =
     `rgb(${bg.map(v => Math.round(v*255)).join(',')})`;
 }
-themeSel.addEventListener('change', () => { applyTheme(); wake(); });
+themeSel.addEventListener('change', applyTheme);
 applyTheme();
-wake();
 
 /* ---------- add your own fish ---------- */
 const el = id => document.getElementById(id);
