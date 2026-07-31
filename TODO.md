@@ -27,6 +27,9 @@ interaction needs a tap equivalent and whether hover can be relied on at all.
 - **Confirm fish spawn outside the frame after the fish slider is adjusted.**
   They should swim in from off-screen, never appear mid-tank. Worth checking
   properly rather than by eye.
+- **Change the starting defaults** to turning 0, speed 9, wave 1.3. Note the
+  speed slider currently tops out at 2.5, so its range needs widening for 9 to
+  be reachable.
 - **Don't remove fish immediately when the fish slider is turned down.** Right
   now the least-visible fish is deleted straight away. Better to let the extra
   fish swim out of frame on their own and simply not replace them.
