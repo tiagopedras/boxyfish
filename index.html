@@ -25,6 +25,9 @@
     border:1px solid #ddd;border-radius:6px;padding:3px 5px
   }
   #hint{grid-column:1/-1;color:#b7bbc0;font-size:11px;padding-top:2px}
+  /* no keyboard on a phone, and the panel is dismissed by tapping instead */
+  @media (max-width:760px){ #hint{display:none} }
+  #panel.idle{pointer-events:none}
 
   /* camera button: no label, black outline icon on a white button */
   #shoot{
@@ -103,6 +106,12 @@
     padding:24px;text-align:center;color:#fff;font-size:13px;
     background:rgba(10,12,14,.62)
   }
+  /* stands in for the camera on a phone, where we go straight to upload */
+  #noCam{
+    position:absolute;inset:0;z-index:2;display:grid;place-items:center;
+    padding:28px;text-align:center;color:#fff;font-size:14px;line-height:1.6;
+    background:#111            /* covers the bracket, which means nothing here */
+  }
   /* close button, top right of the modal */
   #x{
     position:absolute;top:14px;right:14px;z-index:3;
@@ -146,8 +155,8 @@
   <!-- 1. camera -->
   <section id="step-cam">
     <h2>Add your own fish</h2>
-    <p>Hold your drawing up inside the frame, facing right, then take the photo.</p>
-    <div id="stage" class="media"><div id="camwrap"><video id="cam" playsinline muted></video><div id="guide"></div></div><div id="err" class="hide"></div></div>
+    <p id="camLead">Hold your drawing up inside the frame, facing right, then take the photo.</p>
+    <div id="stage" class="media"><div id="camwrap"><video id="cam" playsinline muted></video><div id="guide"></div></div><div id="noCam" class="hide"></div><div id="err" class="hide"></div></div>
     <div class="row end">
       <input id="file" type="file" accept="image/*" class="hide">
       <button class="act" id="useFile" type="button">Upload a photo</button>
@@ -579,6 +588,14 @@ function wake(){
   idleTimer = setTimeout(() => panel.classList.add('idle'), 2600);
 }
 addEventListener('mousemove', wake);
+// on a phone there's no hover to wake the panel, so a tap away hides it
+// and another tap brings it back
+addEventListener('pointerdown', e => {
+  if (!isMobile() || veil.classList.contains('on')) return;
+  if (panel.contains(e.target)) return;
+  clearTimeout(idleTimer);
+  panel.classList.toggle('idle');
+}, true);
 addEventListener('keydown', e => { if (e.key === 'h' || e.key === 'H') panel.style.display = panel.style.display === 'none' ? '' : 'none'; });
 for (const [id, key, dp] of [['count','count',0],['speed','speed',1],['wave','wave',1],['turn','turn',1]]){
   const el = document.getElementById(id), out = document.getElementById(id+'V');
@@ -608,6 +625,9 @@ const CUSTOM_LEN = 2.8;        // captured fish are sized to this, not to the ph
 // How much of the picture sits inside the bracket. One constant drives both
 // the frame you see and the crop that gets processed, so they always agree.
 const FRAME = 0.66;
+// phones go straight to upload: the file picker there offers the camera
+// anyway, and a live feed in a modal is awkward one-handed
+const isMobile = () => matchMedia('(max-width: 760px)').matches;
 let stream = null;             // live webcam, while the modal is open
 let shot = null;               // the cut-out, as a canvas
 let shotFlip = 1;              // -1 when the drawing was held up facing left
@@ -635,7 +655,23 @@ function showErr(msg){ errBox.textContent = msg; errBox.classList.remove('hide')
 async function openModal(){
   veil.classList.add('on');
   errBox.classList.add('hide');
+  el('noCam').classList.add('hide');
   step('camera');
+
+  if (isMobile()){
+    el('camLead').textContent = 'Add a photo of your drawing.';
+    el('noCam').textContent =
+      'Photograph your drawing, filling the frame and facing right, then upload it.';
+    el('noCam').classList.remove('hide');
+    el('snap').classList.add('hide');
+    el('useFile').classList.add('primary');
+    return;
+  }
+  el('camLead').textContent =
+    'Hold your drawing up inside the frame, facing right, then take the photo.';
+  el('snap').classList.remove('hide');
+  el('useFile').classList.remove('primary');
+
   try {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error('no camera API');
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });

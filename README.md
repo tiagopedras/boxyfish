@@ -44,6 +44,11 @@ preview updating live. **Add to aquarium** drops it in from off-screen.
 There is only ever one captured fish. It is always among the fish on screen,
 and it stays until you capture another or reload the page — nothing is saved.
 
+On a phone the modal skips the camera entirely and goes straight to uploading
+a photo — the file picker there offers the camera anyway, and a live feed in a
+modal is awkward one-handed. The panel's keyboard hint is hidden too, and
+tapping the tank away from the panel hides it; tapping again brings it back.
+
 With no webcam, or if camera access is refused, the modal offers to upload a
 photo instead. Note that browsers only allow camera access on `localhost` or
 over HTTPS, so a plain `http://` deployment will fall back to upload.
