@@ -95,6 +95,16 @@ really is twice as big on screen. A fish swims in the direction it was drawn
 facing, along the tilt it was drawn at, and leaves by whichever edge it reaches
 — then it is recycled as a different fish entering from somewhere else.
 
+## Pointer
+
+Move the pointer near a fish and it turns away from you and puts on a brief
+burst of speed, settling back after about a second.
+
+Press on a fish and you can drag it around. While held it trails the cursor,
+beats its tail hard, and tilts to point the way it is being pulled. Let go and
+it bolts off. A fish turning far enough to reverse is mirrored rather than
+rotated, so it never ends up belly-up.
+
 ## Colours
 
 Every fish is stored as plain white-with-black-lines, and the theme decides
