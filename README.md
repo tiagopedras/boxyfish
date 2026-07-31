@@ -100,10 +100,16 @@ facing, along the tilt it was drawn at, and leaves by whichever edge it reaches
 Move the pointer near a fish and it turns away from you and puts on a brief
 burst of speed, settling back after about a second.
 
-Press on a fish and you can drag it around. While held it trails the cursor,
-beats its tail hard, and tilts to point the way it is being pulled. Let go and
-it bolts off. A fish turning far enough to reverse is mirrored rather than
-rotated, so it never ends up belly-up.
+Press on a fish and you can drag it around. It hangs off the pointer near its
+head, so the body trails behind, beats its tail hard, and tilts to point the
+way it is being pulled. Let go and it bolts off.
+
+A fish turning far enough to reverse is mirrored rather than rotated, so it
+never ends up belly-up. Mirroring is deliberately reluctant — the direction
+has to be decisively opposite and stay that way for a moment — because a fish
+flickering between the two directions looks much worse than one briefly
+swimming a little backwards. This matters most on a touchscreen, where a
+wobbling finger would otherwise set it off.
 
 ## Colours
 

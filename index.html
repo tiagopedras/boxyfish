@@ -519,16 +519,27 @@ function pointerAt(z){
 
 // To turn back on itself a fish mirrors, the way it does when it spawns --
 // rotating it that far would show it belly-up instead.
-function reface(f, ang){
-  if (Math.abs(Math.cos(ang)) < 0.15) return;      // too close to vertical
-  if (Math.cos(ang) * Math.cos(f.ang0) < 0){
+//
+// Mirroring is deliberately reluctant. It only happens when the fish is
+// decisively heading the other way, and only after it has stayed that way
+// for a moment: a fish briefly swimming slightly backwards looks far better
+// than one flickering between the two directions, which is what a wobbling
+// finger on a touchscreen would otherwise cause.
+const REFACE_COS = 0.35;      // how opposed the two directions must be
+const REFACE_HOLD = 0.18;     // seconds it must stay that way
+
+function reface(f, ang, dt){
+  if (Math.cos(ang) * Math.cos(f.ang0) < -REFACE_COS) f.wrongWay = (f.wrongWay || 0) + dt;
+  else f.wrongWay = 0;
+  if (f.wrongWay > REFACE_HOLD){
     f.flip = -f.flip;
     f.ang0 = wrapPi(Math.PI - f.ang0);
+    f.wrongWay = 0;
   }
 }
 
-function steerTowards(f, ang){
-  reface(f, ang);
+function steerTowards(f, ang, dt){
+  reface(f, ang, dt);
   f.steerTarget = Math.max(-MAX_STEER, Math.min(MAX_STEER, wrapPi(ang - f.ang0)));
 }
 
@@ -547,14 +558,32 @@ function pickFish(){
 
 // held by the pointer: it trails the cursor, thrashes its tail, and points
 // the way it is being pulled
+const GRAB = 0.65;      // how far up the body the pointer holds it, 1 = the nose
+
 function dragUpdate(f, dt){
   const [mx, my] = pointerAt(f.z);
+
+  // Steer by how the pointer is moving, not by how the fish is moving. The
+  // head offset below shifts the fish every time it turns, so steering off
+  // its own velocity feeds back on itself and the fish shudders in place.
+  if (f.pmx !== undefined){
+    // smoothed: single-frame deltas are far too jittery, especially on touch
+    const k = Math.min(1, dt * 7);
+    f.pvx += ((mx - f.pmx) / Math.max(dt, 1e-3) - f.pvx) * k;
+    f.pvy += ((my - f.pmy) / Math.max(dt, 1e-3) - f.pvy) * k;
+    if (Math.hypot(f.pvx, f.pvy) > 0.8) steerTowards(f, Math.atan2(f.pvy, f.pvx), dt);
+  } else {
+    f.pvx = 0; f.pvy = 0;
+  }
+  f.pmx = mx; f.pmy = my;
+
+  // held near the head rather than the middle, so the body trails behind
+  const reach = GRAB * f.sp.bodyHalf;
+  const tx = mx - Math.cos(f.ang) * reach;
+  const ty = my - Math.sin(f.ang) * reach;
   const step = Math.min(1, dt * 14);
-  const vx = (mx - f.x) * step / Math.max(dt, 1e-3);
-  const vy = (my - f.y) * step / Math.max(dt, 1e-3);
-  f.x += (mx - f.x) * step;
-  f.y += (my - f.y) * step;
-  if (Math.hypot(vx, vy) > 0.4) steerTowards(f, Math.atan2(vy, vx));
+  f.x += (tx - f.x) * step;
+  f.y += (ty - f.y) * step;
   f.steer += (f.steerTarget - f.steer) * Math.min(1, dt * 8);
   f.ang = f.ang0 + f.steer;
   f.beat += dt * 26;      // beating hard against being held
@@ -570,6 +599,7 @@ canvas.addEventListener('pointerdown', e => {
   const f = pickFish();
   if (!f) return;
   dragging = f;
+  f.pmx = undefined; f.wrongWay = 0;
   try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
   canvas.style.cursor = 'grabbing';
 });
@@ -591,7 +621,7 @@ function update(f, t, dt){
     const d = Math.hypot(dx, dy);
     if (d < f.sp.reach + 1.4 && d > 1e-4){
       f.startle = 1;
-      steerTowards(f, Math.atan2(dy, dx));
+      steerTowards(f, Math.atan2(dy, dx), dt);
     }
   }
   if (f.startle > 0){
