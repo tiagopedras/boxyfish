@@ -474,6 +474,10 @@ function spawn(f, firstFrame){
     f.y = -d[1]*t + d[0]*lat;
   }
 
+  f.ang0   = f.ang;      // the direction it settled on; steering works off this
+  f.steer  = 0;          // how far it has currently turned off that
+  f.steerTarget = 0;
+  f.startle = 0;         // 1 right after a fright, fading to 0
   f.skin   = (Math.random() * 64) | 0;   // wraps onto whichever palette is live
   f.spd    = rnd(0.45, 1.15);
   f.roll   = rnd(-0.22, 0.22);
@@ -490,14 +494,109 @@ function spawn(f, firstFrame){
   f.life   = 0;
 }
 
+/* ---------- the pointer: fish shy away from it, and can be dragged ---------- */
+const pointer = { x: 0, y: 0, inside: false };
+let dragging = null;
+
+const MAX_STEER = 80 * Math.PI/180;   // never enough to roll a fish belly-up
+const wrapPi = a => Math.atan2(Math.sin(a), Math.cos(a));
+
+// where the pointer is in world units, at a given depth
+function pointerAt(z){
+  const r = canvas.getBoundingClientRect();
+  return [ ((pointer.x - r.left)/r.width  * 2 - 1) * halfWAt(z),
+           (1 - (pointer.y - r.top)/r.height * 2) * halfHAt(z) ];
+}
+
+// To turn back on itself a fish mirrors, the way it does when it spawns --
+// rotating it that far would show it belly-up instead.
+function reface(f, ang){
+  if (Math.abs(Math.cos(ang)) < 0.15) return;      // too close to vertical
+  if (Math.cos(ang) * Math.cos(f.ang0) < 0){
+    f.flip = -f.flip;
+    f.ang0 = wrapPi(Math.PI - f.ang0);
+  }
+}
+
+function steerTowards(f, ang){
+  reface(f, ang);
+  f.steerTarget = Math.max(-MAX_STEER, Math.min(MAX_STEER, wrapPi(ang - f.ang0)));
+}
+
+// whichever fish is under the pointer, nearest to the camera first
+function pickFish(){
+  let best = null;
+  for (const f of fish){
+    const [mx, my] = pointerAt(f.z);
+    const hw = f.sp.hw * 1.05;
+    const hh = Math.max(f.sp.hh, f.sp.hw * 0.3) * 1.2;
+    if (Math.abs(mx - f.x) <= hw && Math.abs(my - f.y) <= hh)
+      if (!best || f.z > best.z) best = f;
+  }
+  return best;
+}
+
+// held by the pointer: it trails the cursor, thrashes its tail, and points
+// the way it is being pulled
+function dragUpdate(f, dt){
+  const [mx, my] = pointerAt(f.z);
+  const step = Math.min(1, dt * 14);
+  const vx = (mx - f.x) * step / Math.max(dt, 1e-3);
+  const vy = (my - f.y) * step / Math.max(dt, 1e-3);
+  f.x += (mx - f.x) * step;
+  f.y += (my - f.y) * step;
+  if (Math.hypot(vx, vy) > 0.4) steerTowards(f, Math.atan2(vy, vx));
+  f.steer += (f.steerTarget - f.steer) * Math.min(1, dt * 8);
+  f.ang = f.ang0 + f.steer;
+  f.beat += dt * 26;      // beating hard against being held
+  f.fade = 1;
+}
+
+canvas.addEventListener('pointermove', e => {
+  pointer.x = e.clientX; pointer.y = e.clientY; pointer.inside = true;
+});
+canvas.addEventListener('pointerleave', () => { pointer.inside = false; });
+canvas.addEventListener('pointerdown', e => {
+  pointer.x = e.clientX; pointer.y = e.clientY; pointer.inside = true;
+  const f = pickFish();
+  if (!f) return;
+  dragging = f;
+  try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+  canvas.style.cursor = 'grabbing';
+});
+addEventListener('pointerup', () => {
+  if (!dragging) return;
+  dragging.startle = 1;          // let go, and it bolts
+  dragging = null;
+  canvas.style.cursor = '';
+});
+
 function update(f, t, dt){
+  if (f === dragging) return dragUpdate(f, dt);
   f.life += dt;
+
+  // frightened by the pointer: turn away from it and put on a burst
+  if (pointer.inside){
+    const [mx, my] = pointerAt(f.z);
+    const dx = f.x - mx, dy = f.y - my;
+    const d = Math.hypot(dx, dy);
+    if (d < f.sp.reach + 1.4 && d > 1e-4){
+      f.startle = 1;
+      steerTowards(f, Math.atan2(dy, dx));
+    }
+  }
+  if (f.startle > 0){
+    f.startle = Math.max(0, f.startle - dt / 1.1);
+    if (f.startle === 0) f.steerTarget = 0;      // settle back on course
+  }
+  f.steer += (f.steerTarget - f.steer) * Math.min(1, dt * 6);
+  f.ang = f.ang0 + f.steer;
   // steer: a slow wander swings the fish through depth so it turns towards
   // and away from the viewer instead of sliding flat across
   f.heading = cfg.turn * Math.sin(t * f.wanderW + f.wanderP);
 
   const d = dirOf(f);
-  const v = f.spd * cfg.speed;
+  const v = f.spd * cfg.speed * (1 + 1.1 * f.startle);
   f.x += d[0] * v * dt;
   f.y += d[1] * v * dt;
   f.z += d[2] * v * dt;
@@ -512,7 +611,7 @@ function update(f, t, dt){
   if (f.z > NEAR_Z) f.z = NEAR_Z; if (f.z < FAR_Z) f.z = FAR_Z;
 
   // tail beats faster when swimming faster
-  f.beat += dt * (2.2 + v * 2.6) * (0.6 + cfg.wave * 0.6);
+  f.beat += dt * (2.2 + v * 2.6) * (0.6 + cfg.wave * 0.6) * (1 + 1.6 * f.startle);
 
   // fish leave by whichever edge they are pointing at, not just left and right
   const m = f.sp.reach, hw = halfWAt(f.z) + m, hh = halfHAt(f.z) + m;
@@ -536,9 +635,12 @@ function frame(now){
   seeded = true;
   while (fish.length > cfg.count){
     // drop whichever is least visible, so nothing blinks out mid-screen
-    let worst = 0;
-    for (let i = 1; i < fish.length; i++)
-      if ((fish[i].fade ?? 1) < (fish[worst].fade ?? 1)) worst = i;
+    let worst = -1;
+    for (let i = 0; i < fish.length; i++){
+      if (fish[i] === dragging) continue;
+      if (worst < 0 || (fish[i].fade ?? 1) < (fish[worst].fade ?? 1)) worst = i;
+    }
+    if (worst < 0) break;
     fish.splice(worst, 1);
   }
 
@@ -557,6 +659,8 @@ function frame(now){
   gl.uniformMatrix4fv(U.u_vp, false, vp);
   gl.uniform1i(U.u_tex, 0);
   gl.activeTexture(gl.TEXTURE0);
+
+  if (!dragging) canvas.style.cursor = (pointer.inside && pickFish()) ? 'grab' : '';
 
   for (const f of fish) drawOne(ctx, f, th.skins[f.skin % th.skins.length]);
   requestAnimationFrame(frame);
