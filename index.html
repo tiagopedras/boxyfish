@@ -44,6 +44,7 @@
   }
   #veil.on{display:flex}
   #modal{
+    position:relative;
     width:min(50vw,620px);min-width:340px;max-height:88vh;overflow:auto;
     background:#fff;border-radius:14px;padding:20px;
     font:14px/1.5 ui-sans-serif,-apple-system,"Helvetica Neue",sans-serif;color:#1b1f23;
@@ -57,7 +58,7 @@
 
   /* every step uses the same media height, so switching between them
      doesn't resize the modal underneath the pointer */
-  .media{position:relative;height:clamp(220px,38vh,340px)}
+  .media{position:relative;height:clamp(240px,46vh,420px)}
 
   /* the live camera, with a framing rectangle at 80% of the picture */
   #stage{
@@ -66,14 +67,18 @@
   }
   /* sized to the camera's own shape, so the guide lines up with what will
      actually be cropped out of the video */
-  #camwrap{position:relative;height:100%;aspect-ratio:var(--ar,4/3);max-width:100%}
+  #camwrap{position:relative;width:100%;height:100%}
   /* mirrored, so moving the drawing left moves it left on screen. The photo
      is mirrored to match, so what you framed is what you get. */
   #cam{display:block;width:100%;height:100%;object-fit:fill;transform:scaleX(-1)}
+  /* the bracket: everything inside it is what gets processed. --gi is set
+     from the same constant the crop uses, so they can't drift apart.
+     The outline is the second frame, sitting 8px outside the first. */
   #guide{
-    position:absolute;left:10%;top:10%;width:80%;height:80%;
+    position:absolute;inset:var(--gi,17%);
     border:2px solid #fff;border-radius:4px;pointer-events:none;
-    box-shadow:0 0 0 100vmax rgba(0,0,0,.22)
+    outline:2px solid #fff;outline-offset:8px;
+    box-shadow:0 0 0 100vmax rgba(0,0,0,.28)
   }
   #preview{position:absolute;inset:0;display:block;width:100%;height:100%;
            background:#fff;border-radius:10px}
@@ -98,6 +103,14 @@
     padding:24px;text-align:center;color:#fff;font-size:13px;
     background:rgba(10,12,14,.62)
   }
+  /* close button, top right of the modal */
+  #x{
+    position:absolute;top:14px;right:14px;z-index:3;
+    width:30px;height:30px;padding:0;
+    background:#fff;border:1px solid #000;border-radius:8px;
+    display:grid;place-items:center;cursor:pointer
+  }
+  #x:hover{background:#f4f4f4}
   .hide{display:none !important}
 </style>
 </head>
@@ -125,6 +138,11 @@
 
 <div id="veil" role="dialog" aria-modal="true" aria-label="Add your own fish">
  <div id="modal">
+  <button id="x" type="button" title="Close" aria-label="Close">
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#000"
+         stroke-width="1.8" stroke-linecap="round"><path d="M2 2l10 10M12 2L2 12"/></svg>
+  </button>
+
   <!-- 1. camera -->
   <section id="step-cam">
     <h2>Add your own fish</h2>
@@ -587,11 +605,27 @@ const veil = el('veil'), cam = el('cam'), errBox = el('err');
 const steps = { camera: el('step-cam'), busy: el('step-busy'), done: el('step-done') };
 
 const CUSTOM_LEN = 2.8;        // captured fish are sized to this, not to the photo
+// How much of the picture sits inside the bracket. One constant drives both
+// the frame you see and the crop that gets processed, so they always agree.
+const FRAME = 0.66;
 let stream = null;             // live webcam, while the modal is open
 let shot = null;               // the cut-out, as a canvas
 let shotFlip = 1;              // -1 when the drawing was held up facing left
 let pv = null;                 // preview: its own GL context and fish
 let pvRaf = 0;
+
+// fit the camera box to the camera's own shape, inside the media box.
+// Done here rather than with CSS aspect-ratio, which was overflowing the
+// stage and getting clipped.
+function fitCam(){
+  const stage = el('stage'), wrap = el('camwrap');
+  if (!stage.clientWidth) return;
+  const ar = (cam.videoWidth && cam.videoHeight) ? cam.videoWidth / cam.videoHeight : 4/3;
+  let w = stage.clientWidth, h = w / ar;
+  if (h > stage.clientHeight){ h = stage.clientHeight; w = h * ar; }
+  wrap.style.width = w + 'px';
+  wrap.style.height = h + 'px';
+}
 
 function step(name){
   for (const k in steps) steps[k].classList.toggle('hide', k !== name);
@@ -607,13 +641,8 @@ async function openModal(){
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
     cam.srcObject = stream;
     await cam.play();
-    // shape the frame to the camera, so the bracket sits over the real picture
-    const setAR = () => {
-      if (cam.videoWidth)
-        el('camwrap').style.setProperty('--ar', `${cam.videoWidth}/${cam.videoHeight}`);
-    };
-    cam.addEventListener('loadedmetadata', setAR);
-    setAR();
+    cam.addEventListener('loadedmetadata', fitCam);
+    fitCam();
     el('snap').disabled = false;
   } catch (e) {
     el('snap').disabled = true;
@@ -629,16 +658,17 @@ function closeModal(){
   shot = null;
 }
 
-// Cut out exactly what the white bracket encloses -- the middle 80% of the
-// picture -- and mirror it, to match the mirrored feed on screen.
+// Cut out exactly what the white bracket encloses, and mirror it to match
+// the mirrored feed on screen.
 function grabFrame(){
   const vw = cam.videoWidth, vh = cam.videoHeight;
+  const off = (1 - FRAME) / 2;
   const c = document.createElement('canvas');
-  c.width = Math.round(vw * 0.8); c.height = Math.round(vh * 0.8);
+  c.width = Math.round(vw * FRAME); c.height = Math.round(vh * FRAME);
   const g = c.getContext('2d');
   g.translate(c.width, 0);
   g.scale(-1, 1);
-  g.drawImage(cam, vw*0.1, vh*0.1, vw*0.8, vh*0.8, 0, 0, c.width, c.height);
+  g.drawImage(cam, vw*off, vh*off, vw*FRAME, vh*FRAME, 0, 0, c.width, c.height);
   return c;
 }
 
@@ -742,7 +772,12 @@ function release(){
   closeModal();
 }
 
+// the bracket is drawn from the same constant the crop uses
+el('guide').style.setProperty('--gi', ((1 - FRAME) / 2 * 100).toFixed(3) + '%');
+addEventListener('resize', () => { if (veil.classList.contains('on')) fitCam(); });
+
 el('shoot').addEventListener('click', openModal);
+el('x').addEventListener('click', closeModal);
 el('close1').addEventListener('click', closeModal);
 el('retake').addEventListener('click', openModal);
 el('flip').addEventListener('click', () => { shotFlip = -shotFlip; });
