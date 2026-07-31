@@ -26,6 +26,28 @@ Bottom right, fades out when the mouse stops. Press **H** to hide it entirely.
 | Wave | How much the body ripples |
 | Turning | How far they swing towards and away from you |
 
+## Adding your own fish
+
+The camera button at the bottom of the panel opens a modal with the webcam in
+it. Hold a drawing inside the white bracket facing right, take the photo, and
+it gets cut out the same way the scans were: background dropped, body filled,
+paper thrown away. Whatever colour is inside the outline is kept, in both
+themes, so a captured fish stands out from the 52 originals.
+
+The feed is mirrored like a mirror, and the photo is mirrored to match, so
+what you framed is what you get. Only the middle 80% — what the bracket
+encloses — is used.
+
+If it comes out swimming backwards, **Flip direction** mirrors it, with the
+preview updating live. **Add to aquarium** drops it in from off-screen.
+
+There is only ever one captured fish. It is always among the fish on screen,
+and it stays until you capture another or reload the page — nothing is saved.
+
+With no webcam, or if camera access is refused, the modal offers to upload a
+photo instead. Note that browsers only allow camera access on `localhost` or
+over HTTPS, so a plain `http://` deployment will fall back to upload.
+
 ## Re-cutting the fish
 
 `assets/fish/` already holds 52 cut-out fish, so you only need this if you add

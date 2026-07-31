@@ -6,7 +6,8 @@
 <title>Aquarium</title>
 <style>
   html,body{margin:0;height:100%;background:#fff;overflow:hidden}
-  canvas{display:block;width:100%;height:100%;touch-action:none}
+  /* the tank only -- this must not reach the preview canvas in the modal */
+  #c{display:block;width:100%;height:100%;touch-action:none}
   #panel{
     position:fixed;right:18px;bottom:18px;z-index:2;
     font:12px/1.5 ui-sans-serif,-apple-system,"Helvetica Neue",sans-serif;
@@ -24,6 +25,80 @@
     border:1px solid #ddd;border-radius:6px;padding:3px 5px
   }
   #hint{grid-column:1/-1;color:#b7bbc0;font-size:11px;padding-top:2px}
+
+  /* camera button: no label, black outline icon on a white button */
+  #shoot{
+    grid-column:1/-1;justify-self:start;
+    width:38px;height:38px;padding:0;margin-top:2px;
+    background:#fff;border:1px solid #000;border-radius:8px;
+    display:grid;place-items:center;cursor:pointer
+  }
+  #shoot:hover{background:#f4f4f4}
+  #shoot svg{display:block}
+
+  /* modal */
+  #veil{
+    position:fixed;inset:0;z-index:10;display:none;
+    align-items:center;justify-content:center;
+    background:rgba(20,24,28,.42);backdrop-filter:blur(3px)
+  }
+  #veil.on{display:flex}
+  #modal{
+    width:min(50vw,620px);min-width:340px;max-height:88vh;overflow:auto;
+    background:#fff;border-radius:14px;padding:20px;
+    font:14px/1.5 ui-sans-serif,-apple-system,"Helvetica Neue",sans-serif;color:#1b1f23;
+    box-shadow:0 24px 60px rgba(0,0,0,.28)
+  }
+  @media (max-width:760px){
+    #modal{width:100vw;min-width:0;height:100vh;max-height:none;border-radius:0}
+  }
+  #modal h2{margin:0 0 4px;font-size:15px;font-weight:600}
+  #modal p{margin:0 0 14px;color:#6b7076;font-size:13px}
+
+  /* every step uses the same media height, so switching between them
+     doesn't resize the modal underneath the pointer */
+  .media{position:relative;height:clamp(220px,38vh,340px)}
+
+  /* the live camera, with a framing rectangle at 80% of the picture */
+  #stage{
+    position:relative;background:#111;border-radius:10px;overflow:hidden;
+    display:grid;place-items:center
+  }
+  /* sized to the camera's own shape, so the guide lines up with what will
+     actually be cropped out of the video */
+  #camwrap{position:relative;height:100%;aspect-ratio:var(--ar,4/3);max-width:100%}
+  /* mirrored, so moving the drawing left moves it left on screen. The photo
+     is mirrored to match, so what you framed is what you get. */
+  #cam{display:block;width:100%;height:100%;object-fit:fill;transform:scaleX(-1)}
+  #guide{
+    position:absolute;left:10%;top:10%;width:80%;height:80%;
+    border:2px solid #fff;border-radius:4px;pointer-events:none;
+    box-shadow:0 0 0 100vmax rgba(0,0,0,.22)
+  }
+  #preview{position:absolute;inset:0;display:block;width:100%;height:100%;
+           background:#fff;border-radius:10px}
+
+  .row{display:flex;gap:10px;align-items:center;margin-top:14px}
+  .row.end{justify-content:flex-end}
+  button.act{
+    font:inherit;padding:9px 16px;border-radius:8px;cursor:pointer;
+    border:1px solid #000;background:#fff;color:#000
+  }
+  button.act.primary{background:#111;color:#fff}
+  button.act:disabled{opacity:.4;cursor:default}
+  #busy{display:grid;place-items:center;gap:12px;color:#6b7076}
+  .spin{
+    width:26px;height:26px;border:2px solid #e3e5e7;border-top-color:#111;
+    border-radius:50%;animation:spin .8s linear infinite
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+  /* sits over the camera area, so showing it never resizes the modal */
+  #err{
+    position:absolute;inset:0;z-index:2;display:grid;place-items:center;
+    padding:24px;text-align:center;color:#fff;font-size:13px;
+    background:rgba(10,12,14,.62)
+  }
+  .hide{display:none !important}
 </style>
 </head>
 <body>
@@ -38,8 +113,54 @@
   <label>Speed</label>    <input id="speed" type="range" min="0.2" max="2.5" step="0.05" value="1">   <b id="speedV">1.0</b>
   <label>Wave</label>     <input id="wave"  type="range" min="0"   max="2"   step="0.05" value="1">   <b id="waveV">1.0</b>
   <label>Turning</label>  <input id="turn"  type="range" min="0"   max="1.4" step="0.05" value="0.5"> <b id="turnV">0.5</b>
+  <button id="shoot" type="button" title="Add your own fish" aria-label="Add your own fish">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000"
+         stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 8.5h3.2l1.5-2.2h8.6l1.5 2.2H21v10H3z"/>
+      <circle cx="12" cy="13" r="3.6"/>
+    </svg>
+  </button>
   <div id="hint">press H to hide</div>
 </div>
+
+<div id="veil" role="dialog" aria-modal="true" aria-label="Add your own fish">
+ <div id="modal">
+  <!-- 1. camera -->
+  <section id="step-cam">
+    <h2>Add your own fish</h2>
+    <p>Hold your drawing up inside the frame, facing right, then take the photo.</p>
+    <div id="stage" class="media"><div id="camwrap"><video id="cam" playsinline muted></video><div id="guide"></div></div><div id="err" class="hide"></div></div>
+    <div class="row end">
+      <input id="file" type="file" accept="image/*" class="hide">
+      <button class="act" id="useFile" type="button">Upload a photo</button>
+      <button class="act primary" id="snap" type="button">Take photo</button>
+      <button class="act" id="close1" type="button">Cancel</button>
+    </div>
+  </section>
+
+  <!-- 2. working -->
+  <section id="step-busy" class="hide">
+    <h2>Cutting your fish out</h2>
+    <p>Finding the outline and dropping the paper.</p>
+    <div id="busy" class="media"><div class="spin"></div><span>One moment</span></div>
+  </section>
+
+  <!-- 3. preview -->
+  <section id="step-done" class="hide">
+    <h2>Your fish</h2>
+    <p>If it's swimming backwards, flip it.</p>
+    <div class="media"><canvas id="preview"></canvas></div>
+    <div class="row">
+      <button class="act" id="flip" type="button">Flip direction</button>
+      <span style="flex:1"></span>
+      <button class="act" id="retake" type="button">Retake</button>
+      <button class="act primary" id="release" type="button">Add to aquarium</button>
+    </div>
+  </section>
+ </div>
+</div>
+
+<script src="fishify.js"></script>
 
 <script type="x-shader/x-vertex" id="vs">#version 300 es
 precision highp float;
@@ -99,12 +220,13 @@ uniform sampler2D u_tex;
 uniform float u_fade;         // fade in/out as fish enter and leave
 uniform vec3 u_body;          // colour for the paper-white inside
 uniform vec3 u_ink;           // colour for the drawn lines
+uniform float u_tint;         // 1 = take the theme's colours, 0 = keep your own
 out vec4 outColor;
 void main(){
-  vec4 t = texture(u_tex, v_uv);          // premultiplied, greyscale
+  vec4 t = texture(u_tex, v_uv);          // premultiplied
   if (t.a < 0.003) discard;
   float g = clamp(t.r / t.a, 0.0, 1.0);   // 1 = paper, 0 = ink
-  vec3 c = mix(u_ink, u_body, g);
+  vec3 c = mix(t.rgb / t.a, mix(u_ink, u_body, g), u_tint);
   outColor = vec4(c * t.a, t.a) * u_fade;
 }
 </script>
@@ -155,24 +277,25 @@ const CAM_Z = 12, FOV = 42 * Math.PI/180;
 const NEAR_Z = 3.0, FAR_Z = -7.0;      // depth band the fish live in
 let aspect = 1, vp = new Float32Array(16);
 
-function buildVP(){
+function makeVP(a){
   // perspective, with the camera pull-back (a translate along Z) folded in
   const f = 1/Math.tan(FOV/2), near = 0.1, far = 60;
   const A = (far + near)/(near - far), B = (2*far*near)/(near - far);
-  vp = new Float32Array([
-    f/aspect, 0, 0,  0,
-    0,        f, 0,  0,
-    0,        0, A, -1,
-    0,        0, B - A*CAM_Z, CAM_Z
+  return new Float32Array([
+    f/a, 0, 0,  0,
+    0,   f, 0,  0,
+    0,   0, A, -1,
+    0,   0, B - A*CAM_Z, CAM_Z
   ]);
 }
+const buildVP = () => { vp = makeVP(aspect); };
 // visible half-height / half-width at a given depth
 const halfHAt = z => Math.tan(FOV/2) * (CAM_Z - z);
 const halfWAt = z => halfHAt(z) * aspect;
 
 /* ---------- mesh ---------- */
 const NX = 40, NY = 6;
-function makeMesh(){
+function makeMesh(gl){
   const uv = [], idx = [];
   for (let j=0;j<=NY;j++) for (let i=0;i<=NX;i++) uv.push(i/NX, j/NY);
   for (let j=0;j<NY;j++) for (let i=0;i<NX;i++){
@@ -190,26 +313,81 @@ function makeMesh(){
 }
 
 /* ---------- program ---------- */
-function compile(type, src){
-  const s = gl.createShader(type); gl.shaderSource(s, src.trim()); gl.compileShader(s);
-  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
-  return s;
+// built per context: the tank and the modal preview are separate canvases,
+// and a WebGL program can't be shared across them
+function buildCtx(gl){
+  const compile = (type, src) => {
+    const s = gl.createShader(type); gl.shaderSource(s, src.trim()); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    return s;
+  };
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, document.getElementById('vs').textContent));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, document.getElementById('fs').textContent));
+  gl.bindAttribLocation(prog, 0, 'a_uv');
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+  const U = {};
+  for (const k of ['u_vp','u_pos','u_half','u_flip','u_ang','u_bodyHalf','u_heading','u_roll',
+                   'u_phase','u_amp','u_freq','u_beat','u_tex','u_fade','u_body','u_ink','u_tint'])
+    U[k] = gl.getUniformLocation(prog, k);
+  return { gl, prog, U, mesh: makeMesh(gl) };
 }
-const prog = gl.createProgram();
-gl.attachShader(prog, compile(gl.VERTEX_SHADER, document.getElementById('vs').textContent));
-gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, document.getElementById('fs').textContent));
-gl.bindAttribLocation(prog, 0, 'a_uv');
-gl.linkProgram(prog);
-if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
-const U = {};
-for (const k of ['u_vp','u_pos','u_half','u_flip','u_ang','u_bodyHalf','u_heading','u_roll','u_phase',
-                 'u_amp','u_freq','u_beat','u_tex','u_fade','u_body','u_ink'])
-  U[k] = gl.getUniformLocation(prog, k);
+
+function makeTexture(gl, source){
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return tex;
+}
+
+// draw one fish with the given skin; shared by the tank and the preview
+function drawOne(ctx, f, sk){
+  const { gl, U } = ctx;
+  gl.bindTexture(gl.TEXTURE_2D, f.tex || f.sp.tex);
+  gl.uniform3fv(U.u_body, sk.body);
+  gl.uniform3fv(U.u_ink, sk.ink);
+  gl.uniform1f(U.u_tint, f.sp.tint);
+  gl.uniform3f(U.u_pos, f.x, f.y, f.z);
+  gl.uniform2f(U.u_half, f.sp.hw, f.sp.hh);
+  gl.uniform1f(U.u_flip, f.flip);
+  gl.uniform1f(U.u_ang, f.ang);
+  gl.uniform1f(U.u_bodyHalf, f.sp.bodyHalf);
+  gl.uniform1f(U.u_heading, f.heading);
+  gl.uniform1f(U.u_roll, f.roll);
+  gl.uniform1f(U.u_phase, f.phase);
+  gl.uniform1f(U.u_amp, f.amp * cfg.wave * 0.7);
+  gl.uniform1f(U.u_freq, f.freq);
+  gl.uniform1f(U.u_beat, f.beat);
+  gl.uniform1f(U.u_fade, Math.max(0, Math.min(1, f.fade)));
+  gl.drawElements(gl.TRIANGLES, ctx.mesh.n, gl.UNSIGNED_SHORT, 0);
+}
+
+const ctx = buildCtx(gl);
+const U = ctx.U, prog = ctx.prog;
 
 /* ---------- species (one per drawing) ---------- */
 // world units per scanned pixel: a 700px-wide drawing comes out 3.6 units long
 const SCALE = 3.6 / 700;
 const species = [];
+
+// tint 1 = follows the theme's colours, 0 = keeps the colours it came with
+function makeSpecies(tex, w, h, ang, tint){
+  const hw = w/2, hh = h/2;
+  return {
+    tex, hw, hh, ang, tint,
+    // how far the body reaches along its own axis
+    bodyHalf: Math.abs(hw * Math.cos(ang)) + Math.abs(hh * Math.sin(ang)),
+    reach: Math.hypot(hw, hh)                   // margin for entering/leaving
+  };
+}
 async function loadSpecies(){
   let list;
   try {
@@ -221,26 +399,10 @@ async function loadSpecies(){
   await Promise.all(list.map(rec => new Promise(res => {
     const img = new Image();
     img.onload = () => {
-      const tex = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, tex);
-      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
-      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
-      gl.generateMipmap(gl.TEXTURE_2D);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       // straight scale from the drawing, so a fish sketched twice as big
       // really is twice as big here
-      const hw = SCALE * rec.w / 2, hh = SCALE * rec.h / 2;
       const ang = -rec.angle * Math.PI/180;      // scans count Y downwards
-      species.push({
-        tex, hw, hh, ang,
-        // how far the body reaches along its own axis
-        bodyHalf: Math.abs(hw * Math.cos(ang)) + Math.abs(hh * Math.sin(ang)),
-        reach: Math.hypot(hw, hh)               // margin for entering/leaving
-      });
+      species.push(makeSpecies(makeTexture(gl, img), SCALE * rec.w, SCALE * rec.h, ang, 1));
       res();
     };
     img.onerror = () => res();
@@ -251,6 +413,7 @@ async function loadSpecies(){
 /* ---------- fish ---------- */
 const rnd = (a,b) => a + Math.random()*(b-a);
 const fish = [];
+let custom = null;        // the one photographed fish, replaced by each capture
 
 // which way the fish is actually travelling: its drawn tilt, plus how far it
 // has currently steered off it
@@ -263,15 +426,19 @@ function dirOf(f){
 function spawn(f, firstFrame){
   const inUse = new Set(fish.filter(x => x !== f && x.sp).map(x => x.sp));
   let sp, guard = 0;
-  do { sp = species[(Math.random()*species.length)|0]; } while (inUse.has(sp) && ++guard < 40);
+  // the fish someone photographed is always one of the ones on screen
+  if (custom && !inUse.has(custom)) sp = custom;
+  else do { sp = species[(Math.random()*species.length)|0]; } while (inUse.has(sp) && ++guard < 40);
 
   f.sp = sp;
   f.z = rnd(FAR_Z, NEAR_Z);
   f.heading = 0;                                   // steering, off the drawn tilt
   // half of them swim back the other way. The drawing is mirrored to match,
-  // so a fish is never seen swimming tail-first.
-  f.flip = Math.random() < 0.5 ? -1 : 1;
-  f.ang = f.flip < 0 ? Math.PI - sp.ang : sp.ang;
+  // so a fish is never seen swimming tail-first. A captured fish carries a
+  // fixed mirror of its own (baseFlip) when it was held up facing left.
+  const rf = Math.random() < 0.5 ? -1 : 1;
+  f.flip = rf * (sp.baseFlip || 1);
+  f.ang = rf < 0 ? Math.PI - sp.ang : sp.ang;
 
   const m = sp.reach, hw = halfWAt(f.z) + m, hh = halfHAt(f.z) + m;
   if (firstFrame){
@@ -337,12 +504,13 @@ function update(f, t, dt){
 }
 
 /* ---------- render ---------- */
-let mesh, seeded = false, t0 = performance.now()/1000, last = t0;
+let seeded = false, t0 = performance.now()/1000, last = t0;
 
 function frame(now){
   now /= 1000;
   const dt = Math.min(0.05, now - last); last = now;
   const t = now - t0;
+  resize();          // no-op unless the canvas size actually changed
 
   // Grow or shrink the shoal to match the slider. Only the very first fill
   // starts mid-tank; anything added later swims in from off-screen.
@@ -367,30 +535,12 @@ function frame(now){
   gl.disable(gl.DEPTH_TEST);
 
   gl.useProgram(prog);
-  gl.bindVertexArray(mesh.vao);
+  gl.bindVertexArray(ctx.mesh.vao);
   gl.uniformMatrix4fv(U.u_vp, false, vp);
   gl.uniform1i(U.u_tex, 0);
   gl.activeTexture(gl.TEXTURE0);
 
-  for (const f of fish){
-    const sk = th.skins[f.skin % th.skins.length];
-    gl.bindTexture(gl.TEXTURE_2D, f.sp.tex);
-    gl.uniform3fv(U.u_body, sk.body);
-    gl.uniform3fv(U.u_ink, sk.ink);
-    gl.uniform3f(U.u_pos, f.x, f.y, f.z);
-    gl.uniform2f(U.u_half, f.sp.hw, f.sp.hh);
-    gl.uniform1f(U.u_flip, f.flip);
-    gl.uniform1f(U.u_ang, f.ang);
-    gl.uniform1f(U.u_bodyHalf, f.sp.bodyHalf);
-    gl.uniform1f(U.u_heading, f.heading);
-    gl.uniform1f(U.u_roll, f.roll);
-    gl.uniform1f(U.u_phase, f.phase);
-    gl.uniform1f(U.u_amp, f.amp * cfg.wave * 0.7);
-    gl.uniform1f(U.u_freq, f.freq);
-    gl.uniform1f(U.u_beat, f.beat);
-    gl.uniform1f(U.u_fade, Math.max(0, Math.min(1, f.fade)));
-    gl.drawElements(gl.TRIANGLES, mesh.n, gl.UNSIGNED_SHORT, 0);
-  }
+  for (const f of fish) drawOne(ctx, f, th.skins[f.skin % th.skins.length]);
   requestAnimationFrame(frame);
 }
 
@@ -431,6 +581,186 @@ themeSel.addEventListener('change', () => { applyTheme(); wake(); });
 applyTheme();
 wake();
 
+/* ---------- add your own fish ---------- */
+const el = id => document.getElementById(id);
+const veil = el('veil'), cam = el('cam'), errBox = el('err');
+const steps = { camera: el('step-cam'), busy: el('step-busy'), done: el('step-done') };
+
+const CUSTOM_LEN = 2.8;        // captured fish are sized to this, not to the photo
+let stream = null;             // live webcam, while the modal is open
+let shot = null;               // the cut-out, as a canvas
+let shotFlip = 1;              // -1 when the drawing was held up facing left
+let pv = null;                 // preview: its own GL context and fish
+let pvRaf = 0;
+
+function step(name){
+  for (const k in steps) steps[k].classList.toggle('hide', k !== name);
+}
+function showErr(msg){ errBox.textContent = msg; errBox.classList.remove('hide'); }
+
+async function openModal(){
+  veil.classList.add('on');
+  errBox.classList.add('hide');
+  step('camera');
+  try {
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error('no camera API');
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    cam.srcObject = stream;
+    await cam.play();
+    // shape the frame to the camera, so the bracket sits over the real picture
+    const setAR = () => {
+      if (cam.videoWidth)
+        el('camwrap').style.setProperty('--ar', `${cam.videoWidth}/${cam.videoHeight}`);
+    };
+    cam.addEventListener('loadedmetadata', setAR);
+    setAR();
+    el('snap').disabled = false;
+  } catch (e) {
+    el('snap').disabled = true;
+    showErr('No camera available, or access was refused. You can upload a photo instead.');
+  }
+}
+
+function closeModal(){
+  veil.classList.remove('on');
+  if (stream){ stream.getTracks().forEach(t => t.stop()); stream = null; }
+  cam.srcObject = null;
+  cancelAnimationFrame(pvRaf); pvRaf = 0;
+  shot = null;
+}
+
+// Cut out exactly what the white bracket encloses -- the middle 80% of the
+// picture -- and mirror it, to match the mirrored feed on screen.
+function grabFrame(){
+  const vw = cam.videoWidth, vh = cam.videoHeight;
+  const c = document.createElement('canvas');
+  c.width = Math.round(vw * 0.8); c.height = Math.round(vh * 0.8);
+  const g = c.getContext('2d');
+  g.translate(c.width, 0);
+  g.scale(-1, 1);
+  g.drawImage(cam, vw*0.1, vh*0.1, vw*0.8, vh*0.8, 0, 0, c.width, c.height);
+  return c;
+}
+
+async function process(source){
+  step('busy');
+  await new Promise(r => setTimeout(r, 30));       // let the spinner paint
+  let out = null;
+  try { out = window.fishify(source); } catch (e) { out = null; }
+  if (!out){
+    step('camera');
+    showErr("Couldn't find a drawing in there. Fill more of the frame and try again.");
+    return;
+  }
+  shot = out.canvas;
+  shotFlip = 1;
+  step('done');        // must be visible before the preview canvas is measured
+  startPreview();
+}
+
+/* the preview is the same renderer on its own small canvas */
+function startPreview(){
+  const c = el('preview');
+
+  if (!pv){
+    const g = c.getContext('webgl2', {alpha:false, antialias:true, premultipliedAlpha:true});
+    pv = { g, ctx: buildCtx(g) };
+  }
+  const { g } = pv;
+
+  // keep the drawing buffer matched to the box, or the fish comes out
+  // stretched and cropped. Re-checked every frame, like the tank.
+  const fit = () => {
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    const w = Math.max(1, Math.round(c.clientWidth * dpr));
+    const h = Math.max(1, Math.round(c.clientHeight * dpr));
+    if (c.width === w && c.height === h) return false;
+    c.width = w; c.height = h;
+    g.viewport(0, 0, w, h);
+    pv.vp = makeVP(w/h);
+    return true;
+  };
+  fit();
+
+  if (pv.tex) g.deleteTexture(pv.tex);
+  pv.tex = makeTexture(g, shot);
+
+  // size it to sit nicely in the preview rather than to the photo
+  const len = 1.15 * Math.tan(FOV/2) * CAM_Z * (c.width/c.height);
+  const sp = makeSpecies(pv.tex, len, len * shot.height / shot.width, 0, 0);
+  pv.fish = {
+    sp, tex: pv.tex, x: 0, y: 0, z: 0, flip: shotFlip, ang: 0,
+    heading: 0, roll: 0, phase: 0, amp: 0.16, freq: 3.2, beat: 0, fade: 1,
+    skin: 0
+  };
+
+  cancelAnimationFrame(pvRaf);
+  let last = performance.now()/1000;
+  const loop = now => {
+    now /= 1000;
+    const dt = Math.min(0.05, now - last); last = now;
+    const f = pv.fish;
+    if (fit()){                 // the modal was resized: refit the fish too
+      const L = 1.15 * Math.tan(FOV/2) * CAM_Z * (c.width/c.height);
+      f.sp.hw = L/2;
+      f.sp.hh = L/2 * shot.height / shot.width;
+      f.sp.bodyHalf = f.sp.hw;
+    }
+    f.flip = shotFlip;          // mirrors the drawing, live
+    f.beat += dt * 4.2;
+    f.heading = 0.22 * Math.sin(now * 0.5);
+
+    g.clearColor(1,1,1,1);
+    g.clear(g.COLOR_BUFFER_BIT);
+    g.enable(g.BLEND);
+    g.blendFunc(g.ONE, g.ONE_MINUS_SRC_ALPHA);
+    g.disable(g.DEPTH_TEST);
+    g.useProgram(pv.ctx.prog);
+    g.bindVertexArray(pv.ctx.mesh.vao);
+    g.uniformMatrix4fv(pv.ctx.U.u_vp, false, pv.vp);
+    g.uniform1i(pv.ctx.U.u_tex, 0);
+    g.activeTexture(g.TEXTURE0);
+    drawOne(pv.ctx, f, THEMES.paper.skins[0]);
+    pvRaf = requestAnimationFrame(loop);
+  };
+  pvRaf = requestAnimationFrame(loop);
+}
+
+// put the finished fish in the tank, arriving from outside like any other
+function release(){
+  if (!shot) return;
+  const tex = makeTexture(gl, shot);
+  const h = CUSTOM_LEN * shot.height / shot.width;
+  custom = makeSpecies(tex, CUSTOM_LEN, h, 0, 0);
+  custom.baseFlip = shotFlip;         // how the drawing was held up
+
+  // hand the least visible fish over to the new arrival
+  let worst = 0;
+  for (let i = 1; i < fish.length; i++)
+    if ((fish[i].fade ?? 1) < (fish[worst].fade ?? 1)) worst = i;
+  if (fish.length) spawn(fish[worst], false);
+  closeModal();
+}
+
+el('shoot').addEventListener('click', openModal);
+el('close1').addEventListener('click', closeModal);
+el('retake').addEventListener('click', openModal);
+el('flip').addEventListener('click', () => { shotFlip = -shotFlip; });
+el('release').addEventListener('click', release);
+el('snap').addEventListener('click', () => { if (cam.videoWidth) process(grabFrame()); });
+el('useFile').addEventListener('click', () => el('file').click());
+el('file').addEventListener('change', e => {
+  const f = e.target.files?.[0];
+  if (!f) return;
+  const img = new Image();
+  img.onload = () => process(img);
+  img.onerror = () => showErr("That file couldn't be read as an image.");
+  img.src = URL.createObjectURL(f);
+  e.target.value = '';
+});
+veil.addEventListener('click', e => { if (e.target === veil) closeModal(); });
+addEventListener('keydown', e => { if (e.key === 'Escape' && veil.classList.contains('on')) closeModal(); });
+
 const fail = msg => {
   document.body.innerHTML =
     '<p style="font:14px/1.6 ui-sans-serif,sans-serif;padding:2rem;color:#444">' + msg + '</p>';
@@ -439,7 +769,6 @@ const fail = msg => {
 (async () => {
   try {
     resize();
-    mesh = makeMesh();
     await loadSpecies();
     if (!species.length) return fail('No fish in assets/fish — run tools/extract_fish.py first.');
     requestAnimationFrame(frame);
