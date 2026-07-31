@@ -6,7 +6,8 @@
 <title>Aquarium</title>
 <style>
   html,body{margin:0;height:100%;background:#fff;overflow:hidden}
-  canvas{display:block;width:100%;height:100%;touch-action:none}
+  /* the tank only -- this must not reach the preview canvas in the modal */
+  #c{display:block;width:100%;height:100%;touch-action:none}
   #panel{
     position:fixed;right:18px;bottom:18px;z-index:2;
     font:12px/1.5 ui-sans-serif,-apple-system,"Helvetica Neue",sans-serif;
@@ -56,7 +57,7 @@
 
   /* every step uses the same media height, so switching between them
      doesn't resize the modal underneath the pointer */
-  .media{height:clamp(220px,38vh,340px)}
+  .media{position:relative;height:clamp(220px,38vh,340px)}
 
   /* the live camera, with a framing rectangle at 80% of the picture */
   #stage{
@@ -74,7 +75,8 @@
     border:2px solid #fff;border-radius:4px;pointer-events:none;
     box-shadow:0 0 0 100vmax rgba(0,0,0,.22)
   }
-  #preview{display:block;width:100%;background:#fff;border-radius:10px}
+  #preview{position:absolute;inset:0;display:block;width:100%;height:100%;
+           background:#fff;border-radius:10px}
 
   .row{display:flex;gap:10px;align-items:center;margin-top:14px}
   .row.end{justify-content:flex-end}
@@ -147,7 +149,7 @@
   <section id="step-done" class="hide">
     <h2>Your fish</h2>
     <p>If it's swimming backwards, flip it.</p>
-    <canvas id="preview" class="media"></canvas>
+    <div class="media"><canvas id="preview"></canvas></div>
     <div class="row">
       <button class="act" id="flip" type="button">Flip direction</button>
       <span style="flex:1"></span>
@@ -659,24 +661,32 @@ async function process(source){
 /* the preview is the same renderer on its own small canvas */
 function startPreview(){
   const c = el('preview');
-  const dpr = Math.min(devicePixelRatio || 1, 2);
-  c.width = Math.round(c.clientWidth * dpr);
-  c.height = Math.round(c.clientHeight * dpr);
 
   if (!pv){
     const g = c.getContext('webgl2', {alpha:false, antialias:true, premultipliedAlpha:true});
     pv = { g, ctx: buildCtx(g) };
   }
   const { g } = pv;
-  g.viewport(0, 0, c.width, c.height);
-  const a = c.width / c.height;
-  pv.vp = makeVP(a);
+
+  // keep the drawing buffer matched to the box, or the fish comes out
+  // stretched and cropped. Re-checked every frame, like the tank.
+  const fit = () => {
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    const w = Math.max(1, Math.round(c.clientWidth * dpr));
+    const h = Math.max(1, Math.round(c.clientHeight * dpr));
+    if (c.width === w && c.height === h) return false;
+    c.width = w; c.height = h;
+    g.viewport(0, 0, w, h);
+    pv.vp = makeVP(w/h);
+    return true;
+  };
+  fit();
 
   if (pv.tex) g.deleteTexture(pv.tex);
   pv.tex = makeTexture(g, shot);
 
   // size it to sit nicely in the preview rather than to the photo
-  const len = 1.15 * Math.tan(FOV/2) * CAM_Z * a;
+  const len = 1.15 * Math.tan(FOV/2) * CAM_Z * (c.width/c.height);
   const sp = makeSpecies(pv.tex, len, len * shot.height / shot.width, 0, 0);
   pv.fish = {
     sp, tex: pv.tex, x: 0, y: 0, z: 0, flip: shotFlip, ang: 0,
@@ -690,6 +700,12 @@ function startPreview(){
     now /= 1000;
     const dt = Math.min(0.05, now - last); last = now;
     const f = pv.fish;
+    if (fit()){                 // the modal was resized: refit the fish too
+      const L = 1.15 * Math.tan(FOV/2) * CAM_Z * (c.width/c.height);
+      f.sp.hw = L/2;
+      f.sp.hh = L/2 * shot.height / shot.width;
+      f.sp.bodyHalf = f.sp.hw;
+    }
     f.flip = shotFlip;          // mirrors the drawing, live
     f.beat += dt * 4.2;
     f.heading = 0.22 * Math.sin(now * 0.5);
