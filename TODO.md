@@ -5,22 +5,15 @@
 Ideas parked for the `interactive` branch. All four are worth doing; they are
 not mutually exclusive.
 
-- **Fish react to the cursor** — fish notice the pointer as it moves, either
-  shying away from it or curiously following it. Nothing to click; the tank
-  just responds to movement.
 - **Click to feed** — a click drops food, nearby fish break off and swim to it,
-  then go back to what they were doing. The most aquarium-like of the four.
-- **Click a fish** — clicking an individual fish makes it respond: dart away,
-  turn to face you, or come forward. Aimed at one fish rather than the shoal.
-- **Drag a fish around** — while a fish is being dragged with the mouse it
-  beats its tail rapidly, and its body tilts to point along the direction it
-  is being pulled. Let go and it swims off normally.
-- **Click to add a fish** — each click drops another fish in, so someone can
-  build up their own tank.
+  then go back to what they were doing.
+- **Mobile and touch support** — the interactions currently assume a mouse.
+  Every one of them needs a tap or touch-drag equivalent, hover can't be
+  relied on at all, and a shared touch display may have several people
+  touching at once.
 
-Open question when we start: whether this needs to work on touchscreens and
-shared displays as well as a desktop mouse. That decides whether every
-interaction needs a tap equivalent and whether hover can be relied on at all.
+Built on the `cursor` branch: fish shying away from the pointer, and dragging
+a fish around by hand.
 
 ## Fixes to the current version
 
