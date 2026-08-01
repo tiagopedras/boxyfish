@@ -14,6 +14,13 @@ python3 -m http.server 8123
 
 Then open http://localhost:8123
 
+## The sky
+
+`sky/` is the same thing with hand-drawn aeroplanes crossing it, banking into
+their turns and trailing vapour, at http://localhost:8123/sky/. The aircraft
+are SVG rather than scans, drawn by a script instead of by hand — see
+[sky/README.md](sky/README.md).
+
 ## The panel
 
 The gear button in the bottom right corner opens it, with the camera button

@@ -1,0 +1,1000 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Boxy Sky</title>
+<style>
+  html,body{margin:0;height:100%;background:#fff;overflow:hidden}
+  /* the sky only -- this must not reach the preview canvas in the modal */
+  #c{display:block;width:100%;height:100%;touch-action:none}
+  /* the camera button, floating in the bottom right corner */
+  #fabs{
+    position:fixed;right:18px;z-index:3;
+    bottom:calc(18px + env(safe-area-inset-bottom));
+    display:flex;gap:10px;align-items:center
+  }
+  .fab{
+    width:46px;height:46px;padding:0;
+    background:rgba(255,255,255,.9);backdrop-filter:blur(6px);
+    border:1px solid #e2e2e2;border-radius:50%;
+    box-shadow:0 4px 14px rgba(0,0,0,.12);
+    display:grid;place-items:center;cursor:pointer;
+    transition:transform .25s ease,background .2s ease
+  }
+  .fab:hover{background:#fff}
+  .fab svg{display:block}
+
+  /* modal */
+  #veil{
+    position:fixed;inset:0;z-index:10;display:none;
+    align-items:center;justify-content:center;
+    background:rgba(20,24,28,.42);backdrop-filter:blur(3px)
+  }
+  #veil.on{display:flex}
+  #modal{
+    position:relative;
+    width:min(50vw,620px);min-width:340px;max-height:88vh;overflow:auto;
+    background:#fff;border-radius:14px;padding:20px;
+    font:14px/1.5 ui-sans-serif,-apple-system,"Helvetica Neue",sans-serif;color:#1b1f23;
+    box-shadow:0 24px 60px rgba(0,0,0,.28)
+  }
+  @media (max-width:760px){
+    /* fill the screen from the top rather than centring, and use dvh so the
+       phone's own toolbars don't push the header off the top */
+    #veil{align-items:stretch;justify-content:stretch}
+    #modal{
+      width:100vw;min-width:0;border-radius:0;
+      height:100vh;height:100dvh;max-height:none;
+      padding:calc(20px + env(safe-area-inset-top)) 20px
+              calc(20px + env(safe-area-inset-bottom));
+    }
+    #x{top:calc(14px + env(safe-area-inset-top))}
+  }
+  #modal h2{margin:0 0 4px;font-size:15px;font-weight:600}
+  #modal p{margin:0 0 14px;color:#6b7076;font-size:13px}
+
+  /* every step uses the same media height, so switching between them
+     doesn't resize the modal underneath the pointer */
+  .media{position:relative;height:clamp(240px,46vh,420px)}
+
+  /* the live camera, with a framing rectangle at 66% of the picture */
+  #stage{
+    position:relative;background:#111;border-radius:10px;overflow:hidden;
+    display:grid;place-items:center
+  }
+  /* sized to the camera's own shape, so the guide lines up with what will
+     actually be cropped out of the video */
+  #camwrap{position:relative;width:100%;height:100%}
+  /* mirrored, so moving the drawing left moves it left on screen. The photo
+     is mirrored to match, so what you framed is what you get. */
+  #cam{display:block;width:100%;height:100%;object-fit:fill;transform:scaleX(-1)}
+  /* the bracket: everything inside it is what gets processed. --gi is set
+     from the same constant the crop uses, so they can't drift apart.
+     The outline is the second frame, sitting 8px outside the first. */
+  #guide{
+    position:absolute;inset:var(--gi,17%);
+    border:2px solid #fff;border-radius:4px;pointer-events:none;
+    outline:2px solid #fff;outline-offset:8px;
+    box-shadow:0 0 0 100vmax rgba(0,0,0,.28)
+  }
+  #preview{position:absolute;inset:0;display:block;width:100%;height:100%;
+           background:#fff;border-radius:10px}
+
+  .row{display:flex;gap:10px;align-items:center;margin-top:14px}
+  .row.end{justify-content:flex-end}
+  button.act{
+    font:inherit;padding:9px 16px;border-radius:8px;cursor:pointer;
+    border:1px solid #000;background:#fff;color:#000
+  }
+  button.act.primary{background:#111;color:#fff}
+  button.act:disabled{opacity:.4;cursor:default}
+  #busy{display:grid;place-items:center;gap:12px;color:#6b7076}
+  .spin{
+    width:26px;height:26px;border:2px solid #e3e5e7;border-top-color:#111;
+    border-radius:50%;animation:spin .8s linear infinite
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+  /* sits over the camera area, so showing it never resizes the modal */
+  #err{
+    position:absolute;inset:0;z-index:2;display:grid;place-items:center;
+    padding:24px;text-align:center;color:#fff;font-size:13px;
+    background:rgba(10,12,14,.62)
+  }
+  /* stands in for the camera on a phone, where we go straight to upload */
+  #noCam{
+    position:absolute;inset:0;z-index:2;display:grid;place-items:center;
+    padding:24px;text-align:center;color:#8b9099;font-size:13px;line-height:1.6;
+    background:#fff;border-radius:10px;border:2px dashed #cfd4da
+  }
+  #noCam svg{display:block;margin:0 auto 14px;color:#cfd4da}
+
+  /* which way round the aircraft should end up */
+  .edge{
+    position:absolute;top:50%;z-index:2;pointer-events:none;
+    font-size:10px;font-weight:600;letter-spacing:.14em;color:#b0b6bd
+  }
+  .edge.front{right:2px;transform:translateY(-50%) rotate(90deg)}
+  .edge.back {left:2px; transform:translateY(-50%) rotate(90deg)}
+  /* close button, top right of the modal */
+  #x{
+    position:absolute;top:14px;right:14px;z-index:3;
+    width:30px;height:30px;padding:0;
+    background:#fff;border:1px solid #000;border-radius:8px;
+    display:grid;place-items:center;cursor:pointer
+  }
+  #x:hover{background:#f4f4f4}
+  .hide{display:none !important}
+</style>
+<!-- Vercel Web Analytics: this is what @vercel/analytics' inject() loads. Only
+     reports when the page is served from a Vercel deployment. -->
+<script defer src="/_vercel/insights/script.js"></script>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="fabs">
+<button id="shoot" class="fab" type="button"
+        title="Add your own aeroplane" aria-label="Add your own aeroplane">
+  <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#111"
+       stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 8.5h3.2l1.5-2.2h8.6l1.5 2.2H21v10H3z"/>
+    <circle cx="12" cy="13" r="3.6"/>
+  </svg>
+</button>
+</div>
+
+<div id="veil" role="dialog" aria-modal="true" aria-label="Add your own aeroplane">
+ <div id="modal">
+  <button id="x" type="button" title="Close" aria-label="Close">
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#000"
+         stroke-width="1.8" stroke-linecap="round"><path d="M2 2l10 10M12 2L2 12"/></svg>
+  </button>
+
+  <!-- 1. camera -->
+  <section id="step-cam">
+    <h2>Add your own aeroplane</h2>
+    <p id="camLead">Hold your drawing up inside the frame, nose to the right, then take the photo.</p>
+    <div id="stage" class="media"><div id="camwrap"><video id="cam" playsinline muted></video><div id="guide"></div></div><div id="noCam" class="hide"><div>
+       <svg width="128" height="62" viewBox="0 0 128 62" fill="none" stroke="currentColor"
+            stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round">
+         <path d="M126 31 L14 5 L46 31 L14 57 Z"/>
+         <path d="M126 31 L46 31"/>
+       </svg>
+       <span id="noCamText"></span>
+     </div></div><div id="err" class="hide"></div></div>
+    <div class="row end">
+      <input id="file" type="file" accept="image/*" class="hide">
+      <button class="act" id="useFile" type="button">Upload a photo</button>
+      <button class="act primary" id="snap" type="button">Take photo</button>
+      <button class="act" id="close1" type="button">Cancel</button>
+    </div>
+  </section>
+
+  <!-- 2. working -->
+  <section id="step-busy" class="hide">
+    <h2>Cutting your aeroplane out</h2>
+    <p>Finding the outline and dropping the paper.</p>
+    <div id="busy" class="media"><div class="spin"></div><span>One moment</span></div>
+  </section>
+
+  <!-- 3. preview -->
+  <section id="step-done" class="hide">
+    <h2>Your aeroplane</h2>
+    <p>Rotate until the nose faces FRONT.</p>
+    <div class="media">
+      <canvas id="preview"></canvas>
+      <span class="edge back">TAIL</span>
+      <span class="edge front">FRONT</span>
+    </div>
+    <div class="row">
+      <button class="act" id="rot" type="button">Rotate 90°</button>
+      <span style="flex:1"></span>
+      <button class="act" id="retake" type="button">Retake</button>
+      <button class="act primary" id="release" type="button">Send it up</button>
+    </div>
+  </section>
+ </div>
+</div>
+
+<script src="planify.js"></script>
+
+<script type="x-shader/x-vertex" id="vs">#version 300 es
+precision highp float;
+in vec2 a_uv;                 // u: 0 tail -> 1 nose, v: 0 to 1 across the span
+uniform mat4 u_vp;
+uniform vec3 u_pos;           // world position of the aircraft
+uniform vec2 u_half;          // half length, half span of the drawing
+uniform float u_flip;         // -1 mirrors the drawing, so it can fly the other way
+uniform float u_ang;          // the line it is flying along, mirroring included
+uniform float u_bodyHalf;     // half the fuselage length, along that line
+uniform float u_spanHalf;     // half the wingspan, across it
+uniform float u_heading;      // yaw: swings the aircraft through depth
+uniform float u_roll;         // bank, around the fuselage
+uniform float u_pitch;        // nose up and down, around the wings
+uniform float u_flex;         // how far the wings bend
+uniform float u_phase;
+uniform float u_beat;         // wing-flex phase (already time-scaled)
+out vec2 v_uv;
+
+void main(){
+  float u = a_uv.x, v = a_uv.y;
+  // mirroring the geometry but not the texture coords flips the drawing
+  vec2 q = vec2((u - 0.5) * 2.0 * u_half.x * u_flip, (0.5 - v) * 2.0 * u_half.y);
+
+  // step into the aircraft's own frame: x runs nose to tail, y out along the
+  // wings, whatever angle it happens to be flying at
+  float ca = cos(u_ang), sa = sin(u_ang);
+  vec3 p = vec3(q.x * ca + q.y * sa, -q.x * sa + q.y * ca, 0.0);
+
+  // the wings bend: nothing at the root, most of it at the tips, both sides
+  // together -- an aeroplane flexes, it does not swim
+  float s = clamp(p.y / u_spanHalf, -1.0, 1.0);
+  float tip = s * s;
+  p.z += u_flex * u_spanHalf * tip * sin(u_beat + u_phase);
+  // and a slower twist that lifts one tip against the other
+  p.z += u_flex * u_spanHalf * 0.35 * s * sin(u_beat * 0.63 + u_phase);
+
+  // bank around the fuselage: this is what a turn looks like from below
+  float cr = cos(u_roll), sr = sin(u_roll);
+  p.yz = vec2(p.y * cr - p.z * sr, p.y * sr + p.z * cr);
+
+  // pitch around the wings, then yaw, which swings it through depth
+  float cp = cos(u_pitch), sp = sin(u_pitch);
+  p.xz = vec2(p.x * cp + p.z * sp, -p.x * sp + p.z * cp);
+  float ch = cos(u_heading), sh = sin(u_heading);
+  p.xz = vec2(p.x * ch + p.z * sh, -p.x * sh + p.z * ch);
+
+  // and back out, so the drawing keeps the line it is flying on
+  vec3 w = vec3(p.x * ca - p.y * sa, p.x * sa + p.y * ca, p.z);
+
+  v_uv = a_uv;
+  gl_Position = u_vp * vec4(w + u_pos, 1.0);
+}
+</script>
+
+<script type="x-shader/x-fragment" id="fs">#version 300 es
+precision mediump float;
+in vec2 v_uv;
+uniform sampler2D u_tex;
+uniform float u_fade;         // fade in/out as aircraft arrive and leave
+uniform vec3 u_body;          // colour for the paper-white inside
+uniform vec3 u_ink;           // colour for the drawn lines
+uniform float u_tint;         // 1 = take the page's colours, 0 = keep your own
+out vec4 outColor;
+void main(){
+  vec4 t = texture(u_tex, v_uv);          // premultiplied
+  if (t.a < 0.003) discard;
+  float g = clamp(t.r / t.a, 0.0, 1.0);   // 1 = paper, 0 = ink
+  vec3 c = mix(t.rgb / t.a, mix(u_ink, u_body, g), u_tint);
+  outColor = vec4(c * t.a, t.a) * u_fade;
+}
+</script>
+
+<!-- the vapour trail: a ribbon of flat quads, one alpha per corner -->
+<script type="x-shader/x-vertex" id="tvs">#version 300 es
+precision highp float;
+in vec3 a_pos;
+in float a_a;
+uniform mat4 u_vp;
+out float v_a;
+void main(){ v_a = a_a; gl_Position = u_vp * vec4(a_pos, 1.0); }
+</script>
+
+<script type="x-shader/x-fragment" id="tfs">#version 300 es
+precision mediump float;
+in float v_a;
+uniform vec3 u_col;
+uniform float u_fade;
+out vec4 outColor;
+void main(){
+  float a = v_a * u_fade;
+  if (a <= 0.002) discard;
+  outColor = vec4(u_col * a, a);          // premultiplied, like everything else
+}
+</script>
+
+<script>
+(() => {
+const canvas = document.getElementById('c');
+const gl = canvas.getContext('webgl2', {alpha:false, antialias:true, premultipliedAlpha:true});
+if (!gl) { document.body.innerHTML = '<p style="font:14px sans-serif;padding:2rem">This needs WebGL 2.</p>'; return; }
+
+/* ---------- how busy the sky is ---------- */
+const cfg = { count: 12, speed: 1, flex: 1 };
+
+/* ---------- colours ---------- */
+const hex = h => [parseInt(h.slice(1,3),16)/255, parseInt(h.slice(3,5),16)/255, parseInt(h.slice(5,7),16)/255];
+
+// every aircraft is drawn as paper-white with ink lines, so this is all the
+// palette there is: what the paper becomes and what the lines become
+const SKIN = { body: hex('#ffffff'), ink: hex('#111111') };
+const BG   = hex('#ffffff');
+const VAPOUR = hex('#c9d2d9');          // the trails, a good deal lighter than ink
+
+/* ---------- camera ---------- */
+const CAM_Z = 12, FOV = 42 * Math.PI/180;
+const NEAR_Z = 0.5, FAR_Z = -16.0;     // depth band: a deep one, so some fly high
+let aspect = 1, vp = new Float32Array(16);
+
+function makeVP(a){
+  // perspective, with the camera pull-back (a translate along Z) folded in
+  const f = 1/Math.tan(FOV/2), near = 0.1, far = 60;
+  const A = (far + near)/(near - far), B = (2*far*near)/(near - far);
+  return new Float32Array([
+    f/a, 0, 0,  0,
+    0,   f, 0,  0,
+    0,   0, A, -1,
+    0,   0, B - A*CAM_Z, CAM_Z
+  ]);
+}
+const buildVP = () => { vp = makeVP(aspect); };
+// visible half-height / half-width at a given depth
+const halfHAt = z => Math.tan(FOV/2) * (CAM_Z - z);
+const halfWAt = z => halfHAt(z) * aspect;
+
+/* ---------- mesh ---------- */
+// coarser across the span than the fish grid was: the wings bend in a smooth
+// curve, they don't ripple, so there is nothing fine to resolve
+const NX = 24, NY = 16;
+function makeMesh(gl){
+  const uv = [], idx = [];
+  for (let j=0;j<=NY;j++) for (let i=0;i<=NX;i++) uv.push(i/NX, j/NY);
+  for (let j=0;j<NY;j++) for (let i=0;i<NX;i++){
+    const a=j*(NX+1)+i, b=a+1, c=a+NX+1, d=c+1;
+    idx.push(a,c,b, b,c,d);
+  }
+  const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+  const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(uv), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
+  const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx), gl.STATIC_DRAW);
+  gl.bindVertexArray(null);
+  return { vao, n: idx.length };
+}
+
+/* ---------- programs ---------- */
+// built per context: the sky and the modal preview are separate canvases,
+// and a WebGL program can't be shared across them
+function link(gl, vsId, fsId, attribs){
+  const compile = (type, src) => {
+    const s = gl.createShader(type); gl.shaderSource(s, src.trim()); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    return s;
+  };
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, document.getElementById(vsId).textContent));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, document.getElementById(fsId).textContent));
+  attribs.forEach((name, i) => gl.bindAttribLocation(prog, i, name));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+  return prog;
+}
+function uniforms(gl, prog, names){
+  const U = {};
+  for (const k of names) U[k] = gl.getUniformLocation(prog, k);
+  return U;
+}
+
+function buildCtx(gl){
+  const prog = link(gl, 'vs', 'fs', ['a_uv']);
+  const U = uniforms(gl, prog,
+    ['u_vp','u_pos','u_half','u_flip','u_ang','u_bodyHalf','u_spanHalf','u_heading',
+     'u_roll','u_pitch','u_flex','u_phase','u_beat','u_tex','u_fade','u_body','u_ink','u_tint']);
+  return { gl, prog, U, mesh: makeMesh(gl) };
+}
+
+function makeTexture(gl, source){
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return tex;
+}
+
+// draw one aircraft; shared by the sky and the preview
+function drawOne(ctx, f, sk){
+  const { gl, U } = ctx;
+  gl.bindTexture(gl.TEXTURE_2D, f.tex || f.sp.tex);
+  gl.uniform3fv(U.u_body, sk.body);
+  gl.uniform3fv(U.u_ink, sk.ink);
+  gl.uniform1f(U.u_tint, f.sp.tint);
+  gl.uniform3f(U.u_pos, f.x, f.y, f.z);
+  gl.uniform2f(U.u_half, f.sp.hw, f.sp.hh);
+  gl.uniform1f(U.u_flip, f.flip);
+  gl.uniform1f(U.u_ang, f.ang);
+  gl.uniform1f(U.u_bodyHalf, f.sp.bodyHalf);
+  gl.uniform1f(U.u_spanHalf, f.sp.spanHalf);
+  gl.uniform1f(U.u_heading, f.heading);
+  gl.uniform1f(U.u_roll, f.roll);
+  gl.uniform1f(U.u_pitch, f.pitch);
+  gl.uniform1f(U.u_flex, f.flexA * cfg.flex);
+  gl.uniform1f(U.u_phase, f.phase);
+  gl.uniform1f(U.u_beat, f.beat);
+  gl.uniform1f(U.u_fade, Math.max(0, Math.min(1, f.fade)));
+  gl.drawElements(gl.TRIANGLES, ctx.mesh.n, gl.UNSIGNED_SHORT, 0);
+}
+
+const ctx = buildCtx(gl);
+const U = ctx.U, prog = ctx.prog;
+
+/* ---------- the aircraft themselves (one per drawing) ---------- */
+// world units per drawing unit: an 800-unit aeroplane comes out 2.0 across
+const SCALE = 2.0 / 800;
+const species = [];
+
+// tint 1 = takes the page's paper and ink, 0 = keeps the colours it came with
+function makeSpecies(tex, w, h, ang, tint, trail){
+  const hw = w/2, hh = h/2;
+  return {
+    tex, hw, hh, ang, tint, trail: !!trail,
+    // how far the aircraft reaches along the fuselage, and across the wings
+    bodyHalf: Math.abs(hw * Math.cos(ang)) + Math.abs(hh * Math.sin(ang)),
+    spanHalf: Math.abs(hw * Math.sin(ang)) + Math.abs(hh * Math.cos(ang)),
+    reach: Math.hypot(hw, hh)                   // margin for arriving and leaving
+  };
+}
+
+// SVG rather than a scan, so there is no fixed resolution to work from: draw
+// it into a canvas at twice the size it will ever be on screen and take the
+// texture from that
+const TEX_SIDE = 900;
+function rasterise(img, w, h){
+  const k = TEX_SIDE / Math.max(w, h);
+  const c = document.createElement('canvas');
+  c.width = Math.max(2, Math.round(w * k));
+  c.height = Math.max(2, Math.round(h * k));
+  const g = c.getContext('2d');
+  g.drawImage(img, 0, 0, c.width, c.height);
+  return c;
+}
+
+async function loadSpecies(){
+  let list;
+  try {
+    list = await (await fetch('assets/planes/manifest.json')).json();
+  } catch (e) {
+    throw new Error('Could not read assets/planes/manifest.json. Open this page '
+      + 'through a local web server, not by double-clicking the file.');
+  }
+  await Promise.all(list.map(rec => new Promise(res => {
+    const img = new Image();
+    img.onload = () => {
+      // a straight scale from the drawing, so the glider really is the
+      // long-winged one and the dart really is the small one
+      species.push(makeSpecies(makeTexture(gl, rasterise(img, rec.w, rec.h)),
+                               SCALE * rec.w, SCALE * rec.h, 0, 1, rec.trail));
+      res();
+    };
+    img.onerror = () => res();
+    img.src = 'assets/planes/' + rec.file;
+  })));
+}
+
+/* ---------- the fleet ---------- */
+const rnd = (a,b) => a + Math.random()*(b-a);
+const planes = [];
+let custom = null;        // the one photographed aeroplane, replaced by each capture
+
+// which way it is actually travelling: the line it is flying on, plus how far
+// it has yawed off it through depth
+function dirOf(f){
+  const ca = Math.cos(f.ang), sa = Math.sin(f.ang);
+  const ch = Math.cos(f.heading), sh = Math.sin(f.heading);
+  return [ch * ca, ch * sa, -sh];
+}
+
+function spawn(f, firstFrame){
+  const inUse = new Set(planes.filter(x => x !== f && x.sp).map(x => x.sp));
+  let sp, guard = 0;
+  // the aeroplane someone photographed is always one of the ones up there
+  if (custom && !inUse.has(custom)) sp = custom;
+  else do { sp = species[(Math.random()*species.length)|0]; } while (inUse.has(sp) && ++guard < 40);
+
+  f.sp = sp;
+  f.z = rnd(FAR_Z, NEAR_Z);
+  f.heading = 0;
+  // half of them fly the other way, with the drawing mirrored to match, so
+  // nothing is ever seen flying tail-first. A captured aeroplane carries a
+  // fixed mirror of its own (baseFlip) if it was held up nose-left.
+  const rf = Math.random() < 0.5 ? -1 : 1;
+  f.flip = rf * (sp.baseFlip || 1);
+  // aircraft hold a line rather than meander: a shallow climb or descent,
+  // kept shallow, because a hand-drawn aeroplane standing on its wingtip
+  // stops reading as one
+  const climb = rnd(-0.22, 0.22);
+  f.ang = rf < 0 ? Math.PI - (sp.ang + climb) : sp.ang + climb;
+
+  const m = sp.reach, hw = halfWAt(f.z) + m, hh = halfHAt(f.z) + m;
+  if (firstFrame){
+    f.x = rnd(-1,1) * (hw - m);                    // start mid-sky, not all
+    f.y = rnd(-1,1) * (hh - m);                    // arriving at once
+  } else {
+    // back it up along its own course until it is just off-screen, then slide
+    // it sideways so they don't all file through the same corner
+    const d = dirOf(f);
+    const t = Math.min(
+      Math.abs(d[0]) > 1e-4 ? hw/Math.abs(d[0]) : Infinity,
+      Math.abs(d[1]) > 1e-4 ? hh/Math.abs(d[1]) : Infinity);
+    const lat = rnd(-0.7, 0.7) * Math.min(hw, hh);
+    f.x = -d[0]*t - d[1]*lat;
+    f.y = -d[1]*t + d[0]*lat;
+  }
+
+  f.ang0   = f.ang;      // the course it settled on; turns are measured off this
+  f.steer  = 0;          // how far it has turned off that
+  f.steerTarget = 0;
+  f.nextTurn = rnd(2.5, 7);   // seconds until it thinks about turning again
+  f.roll   = 0;
+  f.pitch  = 0;
+  f.spd    = rnd(0.75, 1.9);
+  f.phase  = rnd(0, Math.PI*2);
+  f.flexA  = rnd(0.012, 0.03);
+  f.beat   = rnd(0, Math.PI*2);
+  f.beatW  = rnd(0.8, 1.7);
+  f.driftW = rnd(0.05, 0.16);
+  f.driftP = rnd(0, Math.PI*2);
+  f.wanderW= rnd(0.06, 0.18);
+  f.wanderP= rnd(0, Math.PI*2);
+  f.fade   = 0;
+  f.trail  = [];         // vapour, oldest first
+  f.trailT = 0;
+}
+
+/* ---------- flying ---------- */
+const MAX_STEER = 42 * Math.PI/180;   // aircraft turn, they do not pirouette
+const TURN_RATE = 0.34;               // radians a second, at most
+const ROLL_PER_TURN = 2.6;            // how hard it banks for a given turn rate
+const MAX_ROLL = 62 * Math.PI/180;
+const wrapPi = a => Math.atan2(Math.sin(a), Math.cos(a));
+const clamp = (v, m) => Math.max(-m, Math.min(m, v));
+
+function update(f, t, dt){
+  // now and then it picks a new course and rolls into the turn
+  f.nextTurn -= dt;
+  if (f.nextTurn <= 0){
+    f.steerTarget = clamp(f.steerTarget + rnd(-0.5, 0.5), MAX_STEER);
+    f.nextTurn = rnd(2.5, 7);
+  }
+  // turn at a bounded rate: it is the rate, not the angle, that the bank
+  // comes from, so a rate limit here is what keeps the banking believable
+  const rate = clamp((f.steerTarget - f.steer) * 0.7, TURN_RATE);
+  f.steer += rate * dt;
+  f.ang = f.ang0 + f.steer;
+
+  // yaw through depth, so aircraft turn towards and away from the viewer
+  const h0 = f.heading;
+  f.heading = 0.42 * Math.sin(t * f.wanderW + f.wanderP);
+  const hRate = (f.heading - h0) / Math.max(dt, 1e-3);
+
+  // bank into whichever way it is turning, and lean out of it again as the
+  // turn stops. The flip matters: a mirrored aeroplane banks the other way.
+  const rollWant = clamp(-(rate + hRate * 0.7) * ROLL_PER_TURN * f.flip, MAX_ROLL);
+  f.roll += (rollWant - f.roll) * Math.min(1, dt * 2.2);
+
+  const d = dirOf(f);
+  const v = f.spd * cfg.speed;
+  const z0 = f.z;
+  f.x += d[0] * v * dt;
+  f.y += d[1] * v * dt;
+  f.z += d[2] * v * dt;
+  f.z += Math.sin(t * f.driftW + f.driftP) * 0.5 * dt;
+
+  // nose up or down according to how fast it is closing on the viewer
+  const pitchWant = clamp(-(f.z - z0) / Math.max(dt, 1e-3) * 0.22, 0.3);
+  f.pitch += (pitchWant - f.pitch) * Math.min(1, dt * 2);
+
+  // keep them inside the depth band
+  if (f.z > NEAR_Z) f.z = NEAR_Z; if (f.z < FAR_Z) f.z = FAR_Z;
+
+  f.beat += dt * f.beatW * (0.7 + 0.5 * v);
+
+  // they leave by whichever edge they are pointing at
+  const m = f.sp.reach, hw = halfWAt(f.z) + m, hh = halfHAt(f.z) + m;
+  f.fade = Math.max(0, Math.min(1, Math.min(hw - Math.abs(f.x), hh - Math.abs(f.y)) / m));
+  const gone = Math.abs(f.x) > hw || Math.abs(f.y) > hh;
+  if (gone && f.x * d[0] + f.y * d[1] > 0) return spawn(f, false);
+
+  if (f.sp.trail) trailStep(f, dt, d, v);
+}
+
+/* ---------- vapour trails ---------- */
+//
+// A trail is a line of samples dropped behind the tail. Each carries two
+// numbers that only matter once it has aged: one drifts it sideways, the
+// other decides when it thins out into a gap -- so a fresh trail is a
+// continuous line and an old one is a broken row of dashes.
+//
+// Both numbers are random walks rather than fresh draws, so neighbouring
+// samples agree with each other. Drawn independently, the ribbon zigzagged
+// and the gaps came out one sample long: vapour looked like confetti.
+const TRAIL_STEP = 0.085;     // seconds between samples
+const TRAIL_LIFE = 4.5;       // seconds before a sample is gone
+const TRAIL_W0   = 0.020;     // half-width where it leaves the tail
+const TRAIL_SPREAD = 0.030;   // how much wider it gets, per second of age
+const TRAIL_DRIFT  = 0.035;   // how far it wanders, per second of age
+const TRAIL_MAX  = Math.ceil(TRAIL_LIFE / TRAIL_STEP) + 2;
+
+function trailStep(f, dt, d, v){
+  for (const p of f.trail) p.age += dt;
+  while (f.trail.length && f.trail[0].age > TRAIL_LIFE) f.trail.shift();
+  f.trailT -= dt;
+  if (f.trailT > 0) return;
+  f.trailT = TRAIL_STEP;
+  const b = f.sp.bodyHalf * 0.95;
+  const prev = f.trail[f.trail.length - 1];
+  const walk = (v, k) => Math.max(-1, Math.min(1, (prev ? prev[v] : rnd(-1,1)) * k + rnd(-1,1) * (1-k)));
+  f.trail.push({ x: f.x - d[0]*b, y: f.y - d[1]*b, z: f.z - d[2]*b,
+                 age: 0, j: walk('j', 0.88), g: walk('g', 0.8) });
+  if (f.trail.length > TRAIL_MAX) f.trail.shift();
+}
+
+// one dynamic buffer, big enough for the longest trail, reused by every
+// aircraft in turn: x, y, z, alpha per corner
+const TRAIL_FLOATS = TRAIL_MAX * 6 * 4;
+const trailData = new Float32Array(TRAIL_FLOATS);
+let trailCtx = null;
+
+function buildTrailCtx(gl){
+  const prog = link(gl, 'tvs', 'tfs', ['a_pos','a_a']);
+  const U = uniforms(gl, prog, ['u_vp','u_col','u_fade']);
+  const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+  const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb);
+  gl.bufferData(gl.ARRAY_BUFFER, TRAIL_FLOATS * 4, gl.DYNAMIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,3,gl.FLOAT,false,16,0);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1,1,gl.FLOAT,false,16,12);
+  gl.bindVertexArray(null);
+  return { prog, U, vao, vb };
+}
+
+// the ribbon, as a run of quads: each pair of samples makes one, unless the
+// older of the two has broken up by now
+function buildTrail(f){
+  const pts = f.trail;
+  let n = 0;
+  for (let i = 0; i < pts.length - 1; i++){
+    const a = pts[i], b = pts[i+1];
+    const k = a.age / TRAIL_LIFE;
+    if (a.g < k * 1.6 - 0.55) continue;           // this stretch has thinned out
+    let dx = b.x - a.x, dy = b.y - a.y;
+    const L = Math.hypot(dx, dy);
+    if (L < 1e-5) continue;
+    // across the line of flight, in the plane of the screen
+    const px = dy / L, py = -dx / L;
+    const put = (p, w, al) => {
+      const drift = p.j * p.age * TRAIL_DRIFT;
+      trailData[n++] = p.x + px * (w + drift);
+      trailData[n++] = p.y + py * (w + drift);
+      trailData[n++] = p.z;
+      trailData[n++] = al;
+    };
+    const wa = TRAIL_W0 + a.age * TRAIL_SPREAD, wb = TRAIL_W0 + b.age * TRAIL_SPREAD;
+    // squared, so it holds its density behind the tail and then lets go
+    const aa = 0.8 * Math.pow(1 - a.age / TRAIL_LIFE, 1.5);
+    const ab = 0.8 * Math.pow(1 - b.age / TRAIL_LIFE, 1.5);
+    put(a,  wa, aa); put(a, -wa, aa); put(b,  wb, ab);
+    put(b,  wb, ab); put(a, -wa, aa); put(b, -wb, ab);
+  }
+  return n / 4;                                   // vertices
+}
+
+/* ---------- render ---------- */
+let seeded = false, t0 = performance.now()/1000, last = t0;
+
+function frame(now){
+  now /= 1000;
+  const dt = Math.min(0.05, now - last); last = now;
+  const t = now - t0;
+  resize();          // no-op unless the canvas size actually changed
+
+  while (planes.length < cfg.count) { const f = {}; spawn(f, !seeded); planes.push(f); }
+  seeded = true;
+
+  for (const f of planes) update(f, t, dt);
+  planes.sort((a,b) => a.z - b.z);          // far to near, so near ones cover far ones
+
+  gl.clearColor(BG[0], BG[1], BG[2], 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  gl.disable(gl.DEPTH_TEST);
+
+  gl.activeTexture(gl.TEXTURE0);
+  for (const f of planes){
+    // the trail first, so the aeroplane covers where it leaves the tail
+    if (f.sp.trail && f.trail.length > 1){
+      const verts = buildTrail(f);
+      if (verts){
+        gl.useProgram(trailCtx.prog);
+        gl.bindVertexArray(trailCtx.vao);
+        gl.bindBuffer(gl.ARRAY_BUFFER, trailCtx.vb);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, trailData, 0, verts * 4);
+        gl.uniformMatrix4fv(trailCtx.U.u_vp, false, vp);
+        gl.uniform3fv(trailCtx.U.u_col, VAPOUR);
+        gl.uniform1f(trailCtx.U.u_fade, Math.max(0, Math.min(1, f.fade)));
+        gl.drawArrays(gl.TRIANGLES, 0, verts);
+      }
+    }
+    gl.useProgram(prog);
+    gl.bindVertexArray(ctx.mesh.vao);
+    gl.uniformMatrix4fv(U.u_vp, false, vp);
+    gl.uniform1i(U.u_tex, 0);
+    drawOne(ctx, f, SKIN);
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ---------- plumbing ---------- */
+function resize(){
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const w = Math.round(innerWidth * dpr), h = Math.round(innerHeight * dpr);
+  if (canvas.width !== w || canvas.height !== h){ canvas.width = w; canvas.height = h; }
+  aspect = w/h; gl.viewport(0,0,w,h); buildVP();
+}
+addEventListener('resize', resize);
+
+/* ---------- add your own aeroplane ---------- */
+const el = id => document.getElementById(id);
+const veil = el('veil'), cam = el('cam'), errBox = el('err');
+const steps = { camera: el('step-cam'), busy: el('step-busy'), done: el('step-done') };
+
+const CUSTOM_LEN = 2.4;        // captured aircraft are sized to this, not to the photo
+// How much of the picture sits inside the bracket. One constant drives both
+// the frame you see and the crop that gets processed, so they always agree.
+const FRAME = 0.66;
+// phones go straight to upload: the file picker there offers the camera
+// anyway, and a live feed in a modal is awkward one-handed
+const isMobile = () => matchMedia('(max-width: 760px)').matches;
+let stream = null;             // live webcam, while the modal is open
+let shot = null;               // the cut-out, as a canvas
+let shot0 = null;              // the cut-out as captured
+let shotTurns = 0;             // quarter turns clockwise applied to it
+let pv = null;                 // preview: its own GL context and aeroplane
+let pvRaf = 0;
+
+// fit the camera box to the camera's own shape, inside the media box.
+// Done here rather than with CSS aspect-ratio, which was overflowing the
+// stage and getting clipped.
+function fitCam(){
+  const stage = el('stage'), wrap = el('camwrap');
+  if (!stage.clientWidth) return;
+  const ar = (cam.videoWidth && cam.videoHeight) ? cam.videoWidth / cam.videoHeight : 4/3;
+  let w = stage.clientWidth, h = w / ar;
+  if (h > stage.clientHeight){ h = stage.clientHeight; w = h * ar; }
+  wrap.style.width = w + 'px';
+  wrap.style.height = h + 'px';
+}
+
+// a copy turned by whole quarter turns clockwise
+function turned(src, turns){
+  turns = ((turns % 4) + 4) % 4;
+  if (!turns) return src;
+  const swap = turns % 2 === 1;
+  const c = document.createElement('canvas');
+  c.width  = swap ? src.height : src.width;
+  c.height = swap ? src.width  : src.height;
+  const g = c.getContext('2d');
+  g.translate(c.width/2, c.height/2);
+  g.rotate(turns * Math.PI/2);
+  g.drawImage(src, -src.width/2, -src.height/2);
+  return c;
+}
+
+function step(name){
+  for (const k in steps) steps[k].classList.toggle('hide', k !== name);
+}
+function showErr(msg){ errBox.textContent = msg; errBox.classList.remove('hide'); }
+
+async function openModal(){
+  veil.classList.add('on');
+  errBox.classList.add('hide');
+  el('noCam').classList.add('hide');
+  step('camera');
+
+  if (isMobile()){
+    el('camLead').textContent = 'Add a photo of your drawing.';
+    el('noCamText').textContent =
+      'Photograph your drawing, filling the frame, nose to the right, then upload it.';
+    el('noCam').classList.remove('hide');
+    el('snap').classList.add('hide');
+    el('useFile').classList.add('primary');
+    return;
+  }
+  el('camLead').textContent =
+    'Hold your drawing up inside the frame, nose to the right, then take the photo.';
+  el('snap').classList.remove('hide');
+  el('useFile').classList.remove('primary');
+
+  try {
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error('no camera API');
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    cam.srcObject = stream;
+    await cam.play();
+    cam.addEventListener('loadedmetadata', fitCam);
+    fitCam();
+    el('snap').disabled = false;
+  } catch (e) {
+    el('snap').disabled = true;
+    showErr('No camera available, or access was refused. You can upload a photo instead.');
+  }
+}
+
+function closeModal(){
+  veil.classList.remove('on');
+  if (stream){ stream.getTracks().forEach(t => t.stop()); stream = null; }
+  cam.srcObject = null;
+  cancelAnimationFrame(pvRaf); pvRaf = 0;
+  shot = null;
+}
+
+// Cut out exactly what the white bracket encloses, and mirror it to match
+// the mirrored feed on screen.
+function grabFrame(){
+  const vw = cam.videoWidth, vh = cam.videoHeight;
+  const off = (1 - FRAME) / 2;
+  const c = document.createElement('canvas');
+  c.width = Math.round(vw * FRAME); c.height = Math.round(vh * FRAME);
+  const g = c.getContext('2d');
+  g.translate(c.width, 0);
+  g.scale(-1, 1);
+  g.drawImage(cam, vw*off, vh*off, vw*FRAME, vh*FRAME, 0, 0, c.width, c.height);
+  return c;
+}
+
+async function process(source){
+  step('busy');
+  await new Promise(r => setTimeout(r, 30));       // let the spinner paint
+  let out = null;
+  try { out = window.planify(source); } catch (e) { out = null; }
+  if (!out){
+    step('camera');
+    showErr("Couldn't find a drawing in there. Fill more of the frame and try again.");
+    return;
+  }
+  shot0 = out.canvas;
+  shotTurns = 0;
+  shot = shot0;
+  step('done');        // must be visible before the preview canvas is measured
+  startPreview();
+}
+
+/* the preview is the same renderer on its own small canvas */
+function startPreview(){
+  const c = el('preview');
+
+  if (!pv){
+    const g = c.getContext('webgl2', {alpha:false, antialias:true, premultipliedAlpha:true});
+    pv = { g, ctx: buildCtx(g) };
+  }
+  const { g } = pv;
+
+  // keep the drawing buffer matched to the box, or the aeroplane comes out
+  // stretched and cropped. Re-checked every frame, like the sky.
+  const fit = () => {
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    const w = Math.max(1, Math.round(c.clientWidth * dpr));
+    const h = Math.max(1, Math.round(c.clientHeight * dpr));
+    if (c.width === w && c.height === h) return false;
+    c.width = w; c.height = h;
+    g.viewport(0, 0, w, h);
+    pv.vp = makeVP(w/h);
+    return true;
+  };
+  fit();
+
+  if (pv.tex) g.deleteTexture(pv.tex);
+  pv.tex = makeTexture(g, shot);
+
+  // sized to sit nicely in the preview rather than to the photo
+  const len = 1.1 * Math.tan(FOV/2) * CAM_Z * (c.width/c.height);
+  const sp = makeSpecies(pv.tex, len, len * shot.height / shot.width, 0, 0, false);
+  pv.plane = {
+    sp, tex: pv.tex, x: 0, y: 0, z: 0, flip: 1, ang: 0,
+    heading: 0, roll: 0, pitch: 0, phase: 0, flexA: 0.02, beat: 0, fade: 1
+  };
+
+  cancelAnimationFrame(pvRaf);
+  const loop = now => {
+    now /= 1000;
+    const f = pv.plane;
+    if (fit()){                 // the modal was resized: refit the aeroplane too
+      const L = 1.1 * Math.tan(FOV/2) * CAM_Z * (c.width/c.height);
+      f.sp.hw = L/2;
+      f.sp.hh = L/2 * shot.height / shot.width;
+      f.sp.bodyHalf = f.sp.hw;
+      f.sp.spanHalf = f.sp.hh;
+    }
+    // banking gently to and fro, so you can see it as a solid thing rather
+    // than a sticker, and yawing the way the sky does
+    f.beat = now * 1.2;
+    f.roll = 0.30 * Math.sin(now * 0.5);
+    f.heading = 0.26 * Math.sin(now * 0.33);
+
+    g.clearColor(1,1,1,1);
+    g.clear(g.COLOR_BUFFER_BIT);
+    g.enable(g.BLEND);
+    g.blendFunc(g.ONE, g.ONE_MINUS_SRC_ALPHA);
+    g.disable(g.DEPTH_TEST);
+    g.useProgram(pv.ctx.prog);
+    g.bindVertexArray(pv.ctx.mesh.vao);
+    g.uniformMatrix4fv(pv.ctx.U.u_vp, false, pv.vp);
+    g.uniform1i(pv.ctx.U.u_tex, 0);
+    g.activeTexture(g.TEXTURE0);
+    drawOne(pv.ctx, f, SKIN);
+    pvRaf = requestAnimationFrame(loop);
+  };
+  pvRaf = requestAnimationFrame(loop);
+}
+
+// send the finished aeroplane up, arriving from off-screen like any other.
+// It gets a trail: it is your drawing, it should be the one you can follow.
+function release(){
+  if (!shot) return;
+  const tex = makeTexture(gl, shot);
+  const h = CUSTOM_LEN * shot.height / shot.width;
+  custom = makeSpecies(tex, CUSTOM_LEN, h, 0, 0, true);
+
+  // hand the least visible aeroplane over to the new arrival
+  let worst = 0;
+  for (let i = 1; i < planes.length; i++)
+    if ((planes[i].fade ?? 1) < (planes[worst].fade ?? 1)) worst = i;
+  if (planes.length) spawn(planes[worst], false);
+  closeModal();
+}
+
+// the bracket is drawn from the same constant the crop uses
+el('guide').style.setProperty('--gi', ((1 - FRAME) / 2 * 100).toFixed(3) + '%');
+addEventListener('resize', () => { if (veil.classList.contains('on')) fitCam(); });
+
+el('shoot').addEventListener('click', openModal);
+el('x').addEventListener('click', closeModal);
+el('close1').addEventListener('click', closeModal);
+el('retake').addEventListener('click', openModal);
+el('rot').addEventListener('click', () => {
+  if (!shot0) return;
+  shotTurns = (shotTurns + 1) % 4;
+  shot = turned(shot0, shotTurns);
+  startPreview();                 // the shape changed, so rebuild the preview
+});
+el('release').addEventListener('click', release);
+el('snap').addEventListener('click', () => { if (cam.videoWidth) process(grabFrame()); });
+el('useFile').addEventListener('click', () => el('file').click());
+el('file').addEventListener('change', e => {
+  const f = e.target.files?.[0];
+  if (!f) return;
+  const img = new Image();
+  img.onload = () => process(img);
+  img.onerror = () => showErr("That file couldn't be read as an image.");
+  img.src = URL.createObjectURL(f);
+  e.target.value = '';
+});
+veil.addEventListener('click', e => { if (e.target === veil) closeModal(); });
+addEventListener('keydown', e => { if (e.key === 'Escape' && veil.classList.contains('on')) closeModal(); });
+
+const fail = msg => {
+  document.body.innerHTML =
+    '<p style="font:14px/1.6 ui-sans-serif,sans-serif;padding:2rem;color:#444">' + msg + '</p>';
+};
+
+(async () => {
+  try {
+    resize();
+    trailCtx = buildTrailCtx(gl);
+    await loadSpecies();
+    if (!species.length) return fail('No aircraft in assets/planes — run tools/draw_planes.py first.');
+    requestAnimationFrame(frame);
+  } catch (e) {
+    fail(e.message);
+  }
+})();
+})();
+</script>
+</body>
+</html>
