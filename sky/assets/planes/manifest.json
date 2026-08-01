@@ -1,0 +1,50 @@
+[
+ {
+  "file": "airliner.svg",
+  "w": 818,
+  "h": 681,
+  "trail": true
+ },
+ {
+  "file": "prop.svg",
+  "w": 609,
+  "h": 757,
+  "trail": false
+ },
+ {
+  "file": "biplane.svg",
+  "w": 581,
+  "h": 719,
+  "trail": false
+ },
+ {
+  "file": "jet.svg",
+  "w": 787,
+  "h": 575,
+  "trail": true
+ },
+ {
+  "file": "dart.svg",
+  "w": 768,
+  "h": 568,
+  "trail": false
+ },
+ {
+  "file": "glider.svg",
+  "w": 582,
+  "h": 1005,
+  "trail": false
+ },
+ {
+  "file": "seaplane.svg",
+  "w": 617,
+  "h": 739,
+  "trail": false
+ },
+ {
+  "file": "flyingwing.svg",
+  "w": 600,
+  "h": 728,
+  "trail": true
+ }
+]
