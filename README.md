@@ -64,6 +64,18 @@ With no webcam, or if camera access is refused, the modal offers to upload a
 photo instead. Note that browsers only allow camera access on `localhost` or
 over HTTPS, so a plain `http://` deployment will fall back to upload.
 
+## The link preview
+
+Pasting the address into a chat window shows a card: one of the fish, drawn
+large on white. The picture is `assets/og-fish.png`, and the card it comes from
+is `tools/og/fish.html` — serve the repo, open that page at exactly 1200x630,
+screenshot it, and save it over the PNG. To use a different fish, change the
+one `<img>` in the card.
+
+`og:image` has to be an absolute URL, so the tags in `index.html` name the
+deployment. If you host this somewhere else, that address needs changing with
+it.
+
 ## Re-cutting the fish
 
 `assets/fish/` already holds 52 cut-out fish, so you only need this if you add

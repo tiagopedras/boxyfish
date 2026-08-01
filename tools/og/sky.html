@@ -1,0 +1,29 @@
+<!doctype html>
+<meta charset="utf-8">
+<!-- The card behind sky/assets/og-sky.png: the link preview a chat window
+     shows. Screenshot it at exactly 1200x630 and save it over that file.
+
+       python3 -m http.server 8123
+       # then open http://localhost:8123/tools/og/sky.html at 1200x630
+
+     One airliner with the vapour still hanging behind it, drawn here rather
+     than taken from the page, so the card doesn't depend on catching the
+     right frame. The dashes thin out to the left the way the real ones do. -->
+<title>Boxy Sky — link preview</title>
+<style>
+  html,body{margin:0;width:1200px;height:630px;background:#fff;overflow:hidden}
+  body{position:relative}
+  img{position:absolute;right:96px;top:50%;transform:translateY(-50%);width:620px}
+  svg{position:absolute;left:0;top:0}
+</style>
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none"
+     stroke="#c9d2d9" stroke-linecap="round">
+  <path stroke-width="9"  d="M690 322 H612"/>
+  <path stroke-width="11" d="M596 323 H470"/>
+  <path stroke-width="13" d="M452 325 H352"/>
+  <path stroke-width="15" d="M330 327 H250"/>
+  <path stroke-width="16" d="M214 328 H166"/>
+  <path stroke-width="17" d="M132 330 H104"/>
+  <path stroke-width="18" d="M74 331 H58"/>
+</svg>
+<img src="/sky/assets/planes/airliner.svg" alt="">

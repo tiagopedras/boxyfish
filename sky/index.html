@@ -19,6 +19,21 @@
 })();
 </script>
 <title>Boxy Sky</title>
+<meta name="description" content="Hand-drawn aeroplanes crossing a white sky, banking into their turns and trailing vapour. Photograph one of your own and send it up.">
+<!-- what a chat window shows when the link is pasted. The image is the
+     airliner with its vapour behind it, made from tools/og/sky.html; og:image
+     has to be an absolute URL, so it names the deployment rather than the
+     current host, and cannot lean on the <base> set above either. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Boxy Sky">
+<meta property="og:title" content="Boxy Sky">
+<meta property="og:description" content="Hand-drawn aeroplanes crossing a white sky, banking into their turns and trailing vapour. Photograph one of your own and send it up.">
+<meta property="og:url" content="https://boxyfish.vercel.app/sky/">
+<meta property="og:image" content="https://boxyfish.vercel.app/sky/assets/og-sky.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A hand-drawn airliner seen from above, with a dashed vapour trail behind it.">
+<meta name="twitter:card" content="summary_large_image">
 <style>
   html,body{margin:0;height:100%;background:#fff;overflow:hidden}
   /* the sky only -- this must not reach the preview canvas in the modal */

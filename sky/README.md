@@ -92,6 +92,18 @@ On a phone the modal skips the live camera and goes straight to uploading a
 photo. With no webcam, or if camera access is refused, it offers the same.
 Browsers only allow camera access on `localhost` or over HTTPS.
 
+## The link preview
+
+Pasting the address into a chat window shows a card: the airliner with its
+vapour still hanging behind it. The picture is `assets/og-sky.png`, and the
+card it comes from is `../tools/og/sky.html` — serve the repo, open that page
+at exactly 1200x630, screenshot it, and save it over the PNG. The vapour there
+is drawn by hand in the card rather than taken from the page, so making it
+again doesn't depend on catching the right frame.
+
+`og:image` has to be an absolute URL, so the tags in `index.html` name the
+deployment. If you host this somewhere else, that address needs changing.
+
 ## Redrawing the aircraft
 
 `assets/planes/` already holds all eight, so you only need this to change them.
