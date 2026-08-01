@@ -3,6 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<!-- This page lives in a folder, and hosts serve it at both /sky/ and /sky.
+     Without the trailing slash the browser resolves every relative URL on the
+     page against the parent folder instead: planify.js and the aircraft are
+     looked for at the site root and none of them are found. Naming the folder
+     ourselves settles it, whichever of the two URLs was opened. Has to come
+     before anything that loads a file. -->
+<script>
+(() => {
+  const p = location.pathname;
+  if (p.endsWith('/') || /\.[a-z0-9]+$/i.test(p)) return;   // already a folder, or a file
+  const b = document.createElement('base');
+  b.href = p + '/';
+  document.head.appendChild(b);
+})();
+</script>
 <title>Boxy Sky</title>
 <style>
   html,body{margin:0;height:100%;background:#fff;overflow:hidden}
@@ -196,8 +211,6 @@
   </section>
  </div>
 </div>
-
-<script src="planify.js"></script>
 
 <script type="x-shader/x-vertex" id="vs">#version 300 es
 precision highp float;
@@ -454,6 +467,21 @@ function rasterise(img, w, h){
   const g = c.getContext('2d');
   g.drawImage(img, 0, 0, c.width, c.height);
   return c;
+}
+
+// planify.js is pulled in from here rather than with a <script src> in the
+// markup. The browser's preload scanner resolves tags it finds while parsing
+// against the page's URL, before the <base> above has been added, so a static
+// tag went looking for it at the site root; a script element made here is
+// resolved when it is made, against the base, and lands in the right place.
+function loadScript(src){
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = new URL(src, document.baseURI).href;
+    s.onload = res;
+    s.onerror = () => rej(new Error('Could not load ' + src + '.'));
+    document.head.appendChild(s);
+  });
 }
 
 async function loadSpecies(){
@@ -987,7 +1015,7 @@ const fail = msg => {
   try {
     resize();
     trailCtx = buildTrailCtx(gl);
-    await loadSpecies();
+    await Promise.all([loadSpecies(), loadScript('planify.js')]);
     if (!species.length) return fail('No aircraft in assets/planes — run tools/draw_planes.py first.');
     requestAnimationFrame(frame);
   } catch (e) {
